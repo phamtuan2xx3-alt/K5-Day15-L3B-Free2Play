@@ -64,6 +64,7 @@ Một công cụ kiểm toán bài nộp **kết hợp Code kiểm luật cứng
 4. **Đặc thù lĩnh vực AI20K — Sai thì mất điểm đắt nhất (Lớp 4):**
    - Trong code/file lỡ dính API key (`sk-...`, `AIza...`) hoặc SĐT/email người được phỏng vấn (**−10 điểm**).
    - Chuẩn "đạt" ở `spec.md` §7 bị hạ thấp so với bản chốt CP2 hoặc có câu thử bị xoá khỏi `benchmark.csv` (**0 điểm khối R4**).
+   - Fork bài từ chương trình về nhưng tạo PR / push nhầm lên repo gốc (upstream) của khoá thay vì repo fork của mình/nhóm (sai quy trình nộp, có nguy cơ lộ bài cho người khác).
 
 ---
 
@@ -72,7 +73,7 @@ Một công cụ kiểm toán bài nộp **kết hợp Code kiểm luật cứng
 | Công cụ | Input | Output | Tác động ra ngoài? |
 |---|---|---|---|
 | `list_submission_files(submission_id)` | Mã/đường dẫn hồ sơ | Danh sách file có sẵn & file bắt buộc bị thiếu | Chỉ đọc |
-| `scan_hard_rules(submission_id)` | Mã/đường dẫn hồ sơ | Danh sách lỗi cứng (lộ API key/PII, sai format `TEAMS.md`/`benchmark.csv`, sửa chuẩn đạt, cờ nghi ngờ prompt injection) — **chạy bằng code, không phải AI** | Chỉ đọc |
+| `scan_hard_rules(submission_id)` | Mã/đường dẫn hồ sơ | Danh sách lỗi cứng (lộ API key/PII, sai format `TEAMS.md`/`benchmark.csv`, PR/push nhầm lên repo gốc thay vì repo fork, sửa chuẩn đạt, cờ nghi ngờ prompt injection) — **chạy bằng code, không phải AI** | Chỉ đọc |
 | `get_rubric(criteria_ids)` | Danh sách mã tiêu chí | Định nghĩa chính xác từng tiêu chí & ngưỡng từ rubric | Chỉ đọc |
 | `read_file_lines(submission_id, filename)` | Tên file | Nội dung file đã đánh số dòng `L01:`, `L02:` để trích dẫn kiểm chứng được | Chỉ đọc |
 | `verify_audit_output(report, hard_flags, files)` | Kết quả AI nháp | Kiểm mọi `file:dòng` AI trích có tồn tại thật không; chặn câu cho điểm cuối; giữ nguyên mọi lỗi cứng từ `scan_hard_rules` — **chạy bằng code** | Chỉ kiểm, không ghi ngoài |

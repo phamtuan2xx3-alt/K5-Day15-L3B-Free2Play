@@ -9,7 +9,7 @@
 
 | # | Câu hỏi | Kiểu trả lời |
 |---|---|---|
-| 1 | Bạn là: học viên L3A / L3B / lab coach / TA / giảng viên / khác | Chọn một |
+| 1 | Bạn là: học viên L3A / L3B / lab coach / giảng viên / khác | Chọn một |
 | 2 | Lần gần nhất bạn [việc] là khi nào? | Hôm nay · tuần này · tuần trước · lâu hơn · chưa bao giờ |
 | 3 | Trong 1 tuần qua, bạn [việc] mấy lần? | Số |
 | 4 | Lần gần nhất đó, bạn đã làm thế nào? | Chọn nhiều (tua video · hỏi bạn · hỏi trợ giảng · ChatGPT riêng · bỏ qua · khác) |
