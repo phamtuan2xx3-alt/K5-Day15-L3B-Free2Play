@@ -1,33 +1,41 @@
-# AI SPEC — [Tên lát cắt] · Nhóm [tên nhóm] · Phòng [XXX] · Zone [X]
+# AI SPEC — Giám khảo ảo soát lỗi bài nộp & hỏi vặn phản biện theo Rubric · Nhóm Free2Play · Phòng C401 · Zone L3B
 
 > Mốc nộp: §7 chốt chuẩn "đạt" tại **CP2 19:30 Thứ Sáu 27/11** · §0–§7 nộp **CP3 10:00 Thứ Bảy 28/11** · đủ §0–§10 **CP4 14:30 Thứ Bảy 28/11** · §10 changelog ghi tiếp đến **23:59 Thứ Bảy 28/11**.
 > Đầu mỗi mục ghi bước guide (`02-guide.md` trong repo đề) chỉ cách điền. Mỗi mục ngắn, có số và nguồn; chi tiết để ở file được trỏ tới. Xoá dòng hướng dẫn trong ngoặc vuông khi điền xong.
 
-Track: [ ] A · [ ] B · [ ] C · [ ] D · [ ] E — bài toán: [đề gợi ý trong file track, hoặc bài toán nhóm tự mở rộng] __
-Data BTC cấp đã dùng (nếu có — không commit nguyên file): __
+Track: [x] A · [ ] B · [ ] C · [ ] D · [ ] E — bài toán: A6 · Giám khảo ảo soát lỗi bài nộp & hỏi vặn phản biện theo Rubric (hướng khác trong khoá AI20K)
+Data BTC cấp đã dùng (nếu có — không commit nguyên file): Không dùng `data/preclass` hay `data/training-ops` làm bằng chứng; chỉ đối chiếu cấu trúc đề/rubric chính thức của khoá AI20K. Nhóm tự thu bằng chứng khảo sát/phỏng vấn và tự dựng dữ liệu bài nộp mẫu (`synthetic`).
 
 ## §0. Hiện tại việc này diễn ra thế nào *(guide 1.1)*
 - Luồng hiện tại của việc này, trong khoá hoặc trên app thật (3–5 bước; ảnh chụp từ tài khoản của mình, đã che thông tin):
+  1. Học viên làm bài lab (GĐ1 15 ngày) hoặc đồ án/hackathon trên GitHub gồm nhiều file (`TEAMS.md`, `spec.md`, `evidence/`, `eval/`, `cost/`, slide…).
+  2. Gần sát hạn nộp, học viên mở `03-rubric.md` / `02-guide.md` để tự rà bằng mắt từng hạng mục, tự kiểm tra nguồn số liệu và rà soát lộ API key/thông tin cá nhân.
+  3. Nhóm chạy lệnh `python run.py check` (nếu là khung repo hackathon) để kiểm cú pháp CSV/YAML/TEAMS trước khi push GitHub.
+  4. Khi demo hoặc chấm bài, Lab Coach / giám khảo hỏi vặn trực tiếp từng thành viên về phần việc mang tên mình.
 - Công cụ / AI đang được dùng cho việc này (nếu có) + nguồn. Không kiểm được thì ghi "chưa kiểm":
+  - `python run.py check` trong bộ khung BTC phát (chỉ kiểm tra cấu trúc cột `eval/benchmark.csv`, `eval/metric_spec.yaml`, `TEAMS.md`; không đối chiếu chéo bằng chứng giữa các file, không quét lộ key/PII và không sinh câu hỏi phản biện — nguồn: `eval/run_eval.py` của bộ khung).
+  - Một số học viên tự dán từng đoạn vào ChatGPT/Claude để nhờ đọc thử nhưng thiếu ngữ cảnh chéo toàn bộ hồ sơ và rubric khoá.
 
 ## §1. Người dùng & bằng chứng *(guide 1.1, 1.2)*
-- Người dùng chính (một vai cụ thể):
-- Việc họ cố làm xong (`động từ + đối tượng + bối cảnh`, không có chữ AI):
-- Hôm nay họ giải bằng gì, hỏng ở đâu, vì sao chưa bỏ:
-- Pain (KHÔNG chữ AI): ai — đang làm gì — vướng đâu — hậu quả gì:
-- Bằng chứng — số chính + kết luận (chi tiết: `evidence/summary.md`): __
+- Người dùng chính (một vai cụ thể): Học viên L3 (và nhóm làm đồ án/hackathon AI20K) đang rà soát bài lab/repo trong 1–2 giờ cuối trước hạn nộp và trước buổi demo.
+- Việc họ cố làm xong (`động từ + đối tượng + bối cảnh`, không có chữ AI): Kiểm tra đầy đủ tiêu chí rubric, tính nhất quán số liệu giữa các file và chuẩn bị trả lời phản biện cho bài lab/repo trước hạn nộp của khoá AI20K.
+- Hôm nay họ giải bằng gì, hỏng ở đâu, vì sao chưa bỏ: Họ tự rà thủ công qua nhiều file + chạy `python run.py check` + hỏi chéo bạn cùng nhóm. Cách này hỏng ở chỗ: dễ sót mục rải rác nhiều file, không phát hiện số liệu lệch/không có nguồn giữa `spec`–`evidence`–`eval`–`slide`, dễ lọt thông tin nhạy cảm/API key (−10đ), và không biết trước giám khảo sẽ hỏi vặn chỗ nào yếu nhất. Chưa bỏ vì chưa có công cụ tự kiểm chéo theo đúng rubric và luật trừ điểm của khoá.
+- Pain (KHÔNG chữ AI): Học viên L3 khi rà soát bài lab/repo trước hạn nộp phải tự đối chiếu thủ công hàng chục tiêu chí rubric rải rác nhiều file, nên dễ nộp sót bằng chứng, lệch số liệu, lộ thông tin nhạy cảm hoặc không lường trước chỗ yếu khi bị hỏi phản biện → mất thời gian dò tay và bị trừ điểm oan hoặc nhận 0 điểm phần không giải thích được.
+- Bằng chứng — số chính + kết luận (chi tiết: `evidence/summary.md`): Đang thu thập theo giả thuyết tại `evidence/hypothesis.md` (Khảo sát ≥20 học viên L3 ngoài nhóm + Phỏng vấn ≥3 học viên L3 và 1–2 Lab Coach tại phòng C401 — cập nhật kết quả ở CP2–CP3).
 
 ## §2. Impact & quyết định chọn *(guide 1.3)*
 
 | Hướng | Bao nhiêu người gặp | Bao nhiêu lần / tháng | Mỗi lần tốn gì | Impact / tháng | Làm kịp không | Chọn? |
 |---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |
-|  |  |  |  |  |  |  |
-|  |  |  |  |  |  |  |
+| 1. Soát lỗi bài nộp & hỏi vặn phản biện theo rubric (A6) | >700 HV L3 / >1.000 HV cả khoá (README đề) | *(đang thu từ khảo sát & phỏng vấn — cập nhật ở CP2–CP3)* | Thời gian tự dò rubric + rủi ro trừ 10đ / 0đ khối | *(cập nhật CP2–CP3)* | Kịp (workflow 3 bước, code tool + 1 lượt model) | **Chọn** |
+| 2. Khách hàng ảo tập phỏng vấn Mom Test (A6) | >700 HV L3 (README đề) | *(ước tính 1–2 lần/khoá trước ngày khảo sát)* | Lỗi hỏi dẫn dắt khi phỏng vấn | Thấp hơn (tần suất ít hơn nộp lab) | Kịp | Loại |
+| 3. Ghép nhóm / ghép mentor theo giờ rảnh (A6) | >700 HV L3 (README đề) | *(ước tính 1 lần/đợt ghép nhóm)* | Thời gian tìm nhóm lệch giờ | Thấp (chỉ dùng 1 lần/đợt; bài toán tối ưu hoá hợp code thuần) | Kịp | Loại |
 
-- **Impact / tháng** của hướng chọn = __ người × __ lần × __ phút = __ — nguồn từng thừa số: __ (không có nguồn thì ghi rõ *(tự ước tính)*)
+- **Impact / tháng** của hướng chọn = __ người × __ lần × __ phút = __ — nguồn từng thừa số: *(đang thu số lần/tháng và số phút/lần từ khảo sát ≥20 HV & phỏng vấn ≥3 HV/Lab Coach — cập nhật ở CP2–CP3)*
 - Hướng ĐÃ LOẠI + vì sao (giữ lại, đừng xoá):
-- Số lần / tháng của từng kiểu người dùng (dùng cho persona ở §8):
+  - **Khách hàng ảo tập phỏng vấn Mom Test:** Chỉ dùng 1–2 lần trong cả khoá (trước ngày phỏng vấn), trong khi nộp bài lab & đồ án diễn ra liên tục suốt 15 ngày + hackathon; khó chứng minh giá trị tiết kiệm lặp lại hàng tháng bằng bài toán soát bài nộp.
+  - **Ghép nhóm / ghép mentor theo giờ rảnh:** Tần suất chỉ 1 lần đầu đợt, và việc khớp lịch rảnh/kỹ năng là bài toán ràng buộc dùng thuật toán/code thuần xử lý tốt hơn, không cần AI làm quyết định trung tâm.
+- Số lần / tháng của từng kiểu người dùng (dùng cho persona ở §8): *(đang thu từ khảo sát & phỏng vấn — cập nhật ở CP2–CP3)*
 
 ## §3. Giải pháp tương tự *(guide 2.1)*
 - [sản phẩm / tính năng gần giống]: một điều đáng học · một điều đáng né · mình khác gì

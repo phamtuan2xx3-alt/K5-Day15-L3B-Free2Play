@@ -6,14 +6,15 @@
 
 - Tên nhóm: Free2Play
 - Lớp: L3B
-- Track: ____
+- Track: A
 - Link repo: https://github.com/phamtuan2xx3-alt/K5-Day15-L3B-Free2Play
 
 | STT | Họ và tên | Mã học viên | Vai trò | Phần việc chính |
 |---|---|---|---|---|
-| 1 | ____ | ____ | Đội trưởng | ____ |
-| 2 | ____ | ____ | Thành viên | ____ |
-| 3 | ____ | ____ | Thành viên | ____ |
+| 1 | Phạm Quang Tuấn | 2A202603824 | Đội trưởng | Điều phối nhóm, nộp checkpoint, thiết kế giải pháp & luồng agent |
+| 2 | Đỗ Hồng Vỹ | 2A202604107 | Thành viên | Thiết kế công cụ kiểm luật cứng, nối model & chạy eval |
+| 3 | Chu Văn Nhật | 2A202603848 | Thành viên | Khảo sát/phỏng vấn pain, bộ câu thử (benchmark) & metric |
+| 4 | Bùi Phan Thanh Phúc | 2A202603981 | Thành viên | Phỏng vấn/tổng hợp bằng chứng, mô phỏng chi phí, slide & demo |
 
 **Quy tắc điền**
 - **Lớp:** `L3A` hoặc `L3B`. **Track:** một chữ `A` (EdTech), `B` (Y tế), `C` (Du lịch), `D` (Thương mại điện tử), `E` (Tài chính) hoặc `F` (Làn khác). **Link repo:** link GitHub công khai của nhóm.
