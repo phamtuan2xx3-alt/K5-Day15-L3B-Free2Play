@@ -9,7 +9,7 @@
 |---|---|---|
 | Đào data (x/N, %, cách đếm chạy lại được, ≥5 ví dụ) | ☑ | `evidence/data-mining.md`, `evidence/mine_repos.py` |
 | Khảo sát (≥20 người ngoài nhóm, đúng người dùng) | ☑ **n = 25** học viên đã nộp bài (chốt lúc 19:20 27/11) | `evidence/survey/results.csv`, `evidence/survey/tally.py` |
-| Phỏng vấn (≥3 người ngoài nhóm, đúng người dùng) | ☐ 1 buổi lab coach (P4, không theo Mom Test) · 3 học viên chưa có ghi chép | `evidence/interviews/P4.md` |
+| Phỏng vấn (≥3 người ngoài nhóm, đúng người dùng) | ☐ 1 buổi lab coach (P4, không theo Mom Test) · chưa phỏng vấn học viên (câu hỏi trùng form khảo sát nên nhóm chưa hỏi lại) | `evidence/interviews/P4.md` |
 
 ## 2. Số chính
 
@@ -26,9 +26,9 @@ Chạy lại: `python evidence/survey/tally.py`. Khảo sát mở 17:31, 28 phi�
 
 | | Vai | Gặp pain? | Số lần / 1 tháng qua | Lần gần nhất mất | Đang xoay xở bằng |
 |---|---|---|---|---|---|
-| P1 | Học viên L3 | *chưa có ghi chép* | | | |
-| P2 | Học viên L3 | *chưa có ghi chép* | | | |
-| P3 | Học viên L3 | *chưa có ghi chép* | | | |
+| P1 | Học viên L3 | *chưa phỏng vấn* | | | |
+| P2 | Học viên L3 | *chưa phỏng vấn* | | | |
+| P3 | Học viên L3 | *chưa phỏng vấn* | | | |
 | P4 | Lab coach | Không hỏi theo Mom Test, xem `P4.md` | phiếu: dưới 10 bài / 14 ngày | phiếu: 15–30 phút / đợt | đọc tay |
 
 ## 3. ≥5 trích dẫn nguyên văn (câu 7 khảo sát, giữ nguyên chính tả, bỏ tên)
@@ -51,7 +51,7 @@ Chạy lại: `python evidence/survey/tally.py`. Khảo sát mở 17:31, 28 phi�
 
 Giả thuyết ở `evidence/hypothesis.md` (≥60% n ≥ 20 từng nộp sót mục / thiếu nguồn / sai tiêu chí hoặc mất ≥15 phút dò):
 - **Đúng chữ giả thuyết: 15/25 (60%), vừa chạm ngưỡng.** Tính cả các sự cố khác ở câu 5 (PR nhầm, lộ key, lúng túng khi bị hỏi vặn): 21/25 (84%). Luật đếm hai bản này được viết lúc tổng hợp (sau khi thu phiếu), ghi rõ trong `tally.py`.
-- **Vế 2 (≥2/3 người phỏng vấn kể được lỗi script không bắt): chưa kiểm được.** Chưa có ghi chép phỏng vấn học viên; 2 lab coach bỏ trống câu C4.
+- **Vế 2 (≥2/3 người phỏng vấn kể được lỗi script không bắt): chưa kiểm được.** Chưa phỏng vấn học viên; 2 lab coach bỏ trống câu C4.
 - **Phải đổi trọng tâm:** pain lớn nhất là **PR / push nhầm repo gốc (52%)**, không phải dò rubric (chỉ 6/25 mất ≥16 phút). Trọng tâm nên là: kiểm trạng thái repo thật (đích PR, file .env, đủ file) bằng code, sau đó AI hỏi vặn.
 
 **Điều vẫn chưa biết:**
@@ -65,14 +65,14 @@ Giả thuyết ở `evidence/hypothesis.md` (≥60% n ≥ 20 từng nộp sót m
 |---|---|---|
 | Đào data | Repo `K5-Day15-L3*` sau CP1 | Xong lần 1 (17:20), N = 135 · chạy lại sau CP3 |
 | Khảo sát | ≥20 học viên L3 ngoài nhóm | **Đạt: n = 25** (chốt 19:20 27/11) |
-| Phỏng vấn | ≥3 học viên ngoài nhóm + 1–2 lab coach | 1 lab coach (P4) · 3 học viên đã hỏi nhưng chưa ghi chép |
+| Phỏng vấn | ≥3 học viên ngoài nhóm + 1–2 lab coach | 1 lab coach (P4) · học viên: chưa phỏng vấn. Dự định hỏi sâu 3 người đồng ý ở câu 8, chỉ hỏi điều form chưa trả lời: chuyện PR nhầm, hậu quả, vì sao AI không bắt |
 
 ## Lịch hẹn (chỉ ghi vai và giờ, không tên)
 
 | Vai | Giờ hẹn | Đã xong? |
 |---|---|---|
-| Học viên L3 ngoài nhóm (P1) | chiều 27/11 | ☐ chưa có ghi chép |
-| Học viên L3 ngoài nhóm (P2) | chiều 27/11 | ☐ chưa có ghi chép |
-| Học viên L3 ngoài nhóm (P3) | chiều 27/11 | ☐ chưa có ghi chép |
+| Học viên L3 ngoài nhóm (P1) | __ | ☐ |
+| Học viên L3 ngoài nhóm (P2) | __ | ☐ |
+| Học viên L3 ngoài nhóm (P3) | __ | ☐ |
 | Lab coach (P4) | chiều 27/11 tại C401 | ☑ `P4.md` |
 | Người trả lời phiếu đồng ý hỏi thêm | 3/25 phiếu đồng ý | ☐ |
