@@ -72,7 +72,7 @@ flowchart TD
   |---|---|---|---|
   | `list_submission_files` | `submission_id: str` | Danh sách file có sẵn và danh sách file bắt buộc bị thiếu | Chỉ đọc |
   | `scan_hard_rules` | `submission_id: str` | Danh sách lỗi cứng chạy bằng code: lộ API key/PII, sai format `TEAMS.md`/`benchmark.csv`, PR/push nhầm repo gốc (`pr_target: upstream` trong `meta.json`), đổi chuẩn đạt, cờ nghi ngờ prompt injection | Chỉ đọc |
-  | `get_rubric` | `criteria_ids: list[str]` *(hỗ trợ `["ALL"]`)* | Định nghĩa và ngưỡng từng mã tiêu chí (`R1.1`, `R4.1`, `PENALTY-KEY`, `GIT-FORK-PR`…) | Chỉ đọc |
+  | `get_rubric` | `criteria_ids: list[str]` *(hỗ trợ `["ALL"]`)* | Định nghĩa và ngưỡng từng mã tiêu chí (`R1-EVIDENCE`, `R4-BENCHMARK`, `PENALTY-KEY`, `GIT-FORK-PR`…) | Chỉ đọc |
   | `read_file_lines` | `submission_id: str`, `filename: str` | Nội dung file đánh số từng dòng `L01:`, `L02:` để AI trích dẫn `file:dòng` kiểm chứng được | Chỉ đọc |
   | `verify_audit_output` | `report: str`, `hard_flags: list`, `files: dict` | Kiểm mọi `file:dòng` AI trích có tồn tại thật không; chặn câu tự chấm điểm cuối; ép giữ nguyên lỗi cứng từ `scan_hard_rules` | Chỉ kiểm, không ghi ngoài |
 

@@ -10,7 +10,7 @@
 | Dùng để làm gì | Nguồn cho công cụ `get_rubric(criteria_ids)` · căn cứ để AI đối chiếu bài nộp · căn cứ viết `expected` trong bộ câu thử |
 | Từ đâu | Bộ đề hackathon AI20K khoá 5 (repo đề công khai: `03-rubric.md`, `README.md` mục Luật chung, `01-challenge-brief.md` mục 7 hạng mục). **Viết lại rút gọn**, không chép nguyên văn cả file |
 | Xử lý những bước gì | Tách mỗi tiêu chí thành một mục JSON có mã (`R1.1`, `R2.1`, `R3.1`, `R4.1`, `PENALTY-KEY`, `PENALTY-STANDARD`, `GIT-FORK-PR`, `HAX-G10`…) gồm `id`, `title`, `check_type`, `rule`, `penalty` · người thứ hai đối chiếu từng mục với rubric gốc |
-| Số dòng / số đoạn | `10–12` tiêu chí ở bản khung CP2 *(chốt số đếm chính xác ngay khi ghép `data/rubric.json` ở bước đồng bộ 19:00)* |
+| Số dòng / số đoạn | **12 tiêu chí** (đã chốt trong `data/rubric.json`) |
 | Phiên bản / ngày lấy | Bộ đề bản commit `b568b95` trước khi tách starter-repo, đọc 27/11/2026 |
 | Nhãn | thật (trích / viết lại từ tài liệu công khai) |
 | Giới hạn | Chỉ phủ rubric hackathon AI20K K5. Rubric lab ngày thường có thể khác — ngoài phạm vi, công cụ phải báo `"chưa kiểm được"` |
@@ -22,7 +22,7 @@
 | Dùng để làm gì | Đầu vào bản chạy thử và bộ câu thử: mỗi câu `S01`–`S15` trỏ tới một mini-repo giả lập tương ứng |
 | Từ đâu | **Nhóm tự dựng** (mini-repo chỉ gồm `TEAMS.md`, `canvas.md`, `spec.md`, `evidence_summary.md` — tương ứng `evidence/summary.md` ở repo chuẩn, `benchmark.csv`, `meta.json` tuỳ ca), tên nhóm và tên người đều giả |
 | Xử lý những bước gì | Bắt đầu từ một bài sạch đạt đủ tiêu chí (`S01`) → script `data/make_submissions.py` (`seed = 42`) tạo 15 biến thể cài đúng lỗi thật từ đào data & khảo sát: bài sạch khác mẫu (`S08`), lỗi `TEAMS.md` (`S02`), pain có chữ `"AI"` (`S03`), PR nhầm repo gốc (`S04`), thiếu file (`S05`), lộ key giả `sk-TEST…` (`S06`), lệch số (`S07`), đổi chuẩn đạt (`S09`), thiếu file/cột CSV (`S11`), đa lỗi (`S12`), thiếu G10/Không làm (`S13`), prompt injection (`S14`), ca xin vượt thẩm quyền (`S15`) |
-| Số dòng / số đoạn | **15 hồ sơ mẫu `S01`–`S15` cho CP2** *(đang ghép từ nhánh code khung lúc 19:00; sẽ mở rộng 20–30 hồ sơ trước CP3)* |
+| Số dòng / số đoạn | **15 hồ sơ mẫu `S01`–`S15` cho CP2** *(đã ghép đầy đủ từ `develop-vy`; sẽ mở rộng 20–30 hồ sơ trước CP3)* |
 | Phiên bản / ngày lấy | v1 (`seed = 42`, dựng 27/11/2026) |
 | Nhãn | `synthetic` |
 | Giới hạn | Lỗi cài sẵn sạch và rõ hơn lỗi ngoài đời; bài thật viết lộn xộn hơn. Key giả `sk-TEST…` không phải key thật — không bao giờ dùng key thật làm dữ liệu thử |

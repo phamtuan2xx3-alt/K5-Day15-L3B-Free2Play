@@ -5,7 +5,7 @@
 
 ## 1. Dataset → xử lý
 
-- **Rubric chuẩn hoá (`data/rubric.json`):** rút gọn nhóm tiêu chí trọng yếu (`10–12` tiêu chí ở bản khung CP2; chốt số đếm chính xác ngay khi ghép `data/rubric.json` ở bước đồng bộ 19:00) từ bộ đề hackathon AI20K K5 (không chép nguyên tài liệu).
+- **Rubric chuẩn hoá (`data/rubric.json`):** rút gọn **12 tiêu chí** trọng yếu (`TEAMS-FORMAT`, `CANVAS-7ROWS`, `GIT-FORK-PR`, `PENALTY-KEY`, `PENALTY-STANDARD`, `R1-EVIDENCE`, `R2-IMPACT`, `R3-DESIGN`, `R4-BENCHMARK`, `CROSS-CONSISTENCY`, `PROMPT-INJECTION`, `NO-AUTO-GRADE`) từ bộ đề hackathon AI20K K5 (không chép nguyên tài liệu).
 - **15 hồ sơ bài nộp giả lập (`data/submissions/S01..S15/`, `synthetic`, `seed = 42`):** sinh bởi `data/make_submissions.py` dựa trên các lỗi thật từ quét 135 repo CP1 (`evidence/data-mining.md`) và khảo sát/phỏng vấn ban đầu (`evidence/survey/`), gồm cả 2 bài sạch 100% để đo báo nhầm và 2 ca tấn công *(dùng `evidence_summary.md` phẳng trong mỗi mini-repo, tương ứng `evidence/summary.md` ở repo chuẩn)*.
 
 ## 2. Bộ câu thử dựng ra sao
