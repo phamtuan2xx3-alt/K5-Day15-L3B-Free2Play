@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -134,8 +135,26 @@ def verify_token(token: str | None, expected_typ: str | None = None) -> dict[str
 
 
 def _is_trusted_proxy_peer(request: Request) -> bool:
-    peer = request.client.host if request.client else ""
-    return peer in {"127.0.0.1", "::1"}
+    peer = (request.client.host if request.client else "").strip()
+    if peer in {"127.0.0.1", "::1"}:
+        return True
+    raw_cidrs = (os.environ.get("TRUSTED_PROXY_CIDRS") or "").strip()
+    if not raw_cidrs or not peer:
+        return False
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    for item in raw_cidrs.split(","):
+        cidr = item.strip()
+        if not cidr:
+            continue
+        try:
+            if peer_ip in ipaddress.ip_network(cidr, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _is_https_request(request: Request) -> bool:
@@ -170,9 +189,9 @@ def _session_cookie_name(request: Request) -> str:
 
 
 def _client_ip(request: Request) -> str:
-    """Xác định IP client an toàn: chỉ tin X-Real-IP / hop cuối XFF khi đi qua proxy localhost."""
+    """Xác định IP client an toàn: chỉ tin X-Real-IP / hop cuối XFF khi đi qua proxy tin cậy."""
     peer = request.client.host if request.client else "127.0.0.1"
-    if peer in {"127.0.0.1", "::1"}:
+    if _is_trusted_proxy_peer(request):
         real_ip = (request.headers.get("x-real-ip") or "").strip()
         if real_ip:
             return real_ip

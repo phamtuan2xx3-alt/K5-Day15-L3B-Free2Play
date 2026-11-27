@@ -564,6 +564,38 @@ class TestPhase5Api(unittest.TestCase):
         )
         self.assertEqual(too_long.status_code, 422)
 
+    def test_trusted_proxy_cidrs_for_docker_caddy_and_block_outside_cidr(self):
+        with patch.dict(os.environ, {"TRUSTED_PROXY_CIDRS": "172.18.0.0/16"}):
+            docker_proxy = TestClient(
+                self.app,
+                base_url="http://repoksv.tuanpq.com",
+                client=("172.18.0.5", 50000),
+            )
+            res_trusted = docker_proxy.get(
+                "/auth/google",
+                headers={"x-forwarded-proto": "https", "x-forwarded-host": "repoksv.tuanpq.com"},
+                follow_redirects=False,
+            )
+            self.assertEqual(res_trusted.status_code, 302)
+            qs = urllib.parse.parse_qs(urllib.parse.urlsplit(res_trusted.headers["location"]).query)
+            self.assertEqual(qs["redirect_uri"], ["https://repoksv.tuanpq.com/auth/google/callback"])
+            docker_proxy.close()
+
+            outside_peer = TestClient(
+                self.app,
+                base_url="http://repoksv.tuanpq.com",
+                client=("198.51.100.99", 50000),
+            )
+            res_outside = outside_peer.get(
+                "/auth/google",
+                headers={"x-forwarded-proto": "https", "x-forwarded-host": "evil.example"},
+                follow_redirects=False,
+            )
+            self.assertEqual(res_outside.status_code, 302)
+            qs_out = urllib.parse.parse_qs(urllib.parse.urlsplit(res_outside.headers["location"]).query)
+            self.assertEqual(qs_out["redirect_uri"], ["http://repoksv.tuanpq.com/auth/google/callback"])
+            outside_peer.close()
+
 
 if __name__ == "__main__":
     unittest.main()
