@@ -108,23 +108,38 @@ class TestPhase5Api(unittest.TestCase):
         bad_cb = self.client.get("/auth/google/callback?code=abc&state=wrong-state", follow_redirects=False)
         self.assertEqual(bad_cb.status_code, 400)
 
-        # 3. Valid state + mocked Google exchange (with HTTPS forwarded proto -> __Host-repoksv_session)
+        # 3. Valid state + mocked Google exchange (trusted loopback proxy HTTPS -> __Host-repoksv_session)
         mock_userinfo = {
             "sub": "google-sub-12345",
             "email": "tuan@example.com",
             "name": "Phạm Quang Tuấn",
             "picture": "https://example.com/avatar.png",
         }
+        proxy_client = TestClient(
+            self.app,
+            base_url="https://repoksv.tuanpq.com",
+            client=("127.0.0.1", 50000),
+        )
+        proxy_auth = proxy_client.get(
+            "/auth/google",
+            headers={"x-forwarded-proto": "https", "x-forwarded-host": "repoksv.tuanpq.com"},
+            follow_redirects=False,
+        )
+        self.assertEqual(proxy_auth.status_code, 302)
+        proxy_qs = urllib.parse.parse_qs(urllib.parse.urlsplit(proxy_auth.headers["location"]).query)
+        self.assertEqual(proxy_qs["redirect_uri"], ["https://repoksv.tuanpq.com/auth/google/callback"])
+        proxy_state = proxy_qs["state"][0]
         with patch.object(server, "_exchange_google_code", return_value=mock_userinfo):
-            cb_res = self.client.get(
-                f"/auth/google/callback?code=valid-code&state={state}",
-                headers={"x-forwarded-proto": "https"},
+            cb_res = proxy_client.get(
+                f"/auth/google/callback?code=valid-code&state={proxy_state}",
+                headers={"x-forwarded-proto": "https", "x-forwarded-host": "repoksv.tuanpq.com"},
                 follow_redirects=False,
             )
         self.assertEqual(cb_res.status_code, 302)
         set_cookie_hdr = cb_res.headers.get("set-cookie", "")
         self.assertIn("__Host-repoksv_session=", set_cookie_hdr)
         self.assertIn("HttpOnly", set_cookie_hdr)
+        self.assertIn("Secure", set_cookie_hdr)
 
         # Also log in over standard HTTP test client so TestClient stores repoksv_session cleanly
         auth_res2 = self.client.get("/auth/google", follow_redirects=False)
@@ -138,14 +153,17 @@ class TestPhase5Api(unittest.TestCase):
         self.assertTrue(me.json()["authenticated"])
         self.assertEqual(me.json()["user"]["email"], "tuan@example.com")
 
-        # Tampered token rejected
+        # Tampered token & cross-domain token type confusion rejected
         self.assertIsNone(verify_token(sign_token({"user_id": "x"}) + "tamper"))
+        anon_tok = sign_token({"user_id": "u-tuan"}, typ="anon")
+        self.assertIsNone(verify_token(anon_tok, expected_typ="session"))
+        self.assertIsNotNone(verify_token(anon_tok, expected_typ="anon"))
 
-        # 4. GET /auth/logout blocked (404/405); POST /auth/logout clears cookies with Secure on HTTPS
+        # 4. GET /auth/logout blocked (404/405); POST /auth/logout clears cookies with Secure on HTTPS proxy
         get_out = self.client.get("/auth/logout", follow_redirects=False)
         self.assertIn(get_out.status_code, (404, 405))
 
-        out_https = self.client.post(
+        out_https = proxy_client.post(
             "/auth/logout",
             headers={"x-forwarded-proto": "https"},
             follow_redirects=False,
@@ -156,6 +174,19 @@ class TestPhase5Api(unittest.TestCase):
         self.assertEqual(len(host_del), 1)
         self.assertIn("Secure", host_del[0])
         self.assertIn("HttpOnly", host_del[0])
+        proxy_client.close()
+
+        # Sanitized OAuth error & generic 502 on exchange exception
+        err_cb = self.client.get("/auth/google/callback?error=access_denied<script>", follow_redirects=False)
+        self.assertEqual(err_cb.status_code, 400)
+        self.assertNotIn("<", err_cb.json()["detail"])
+
+        auth_res3 = self.client.get("/auth/google", follow_redirects=False)
+        state3 = urllib.parse.parse_qs(urllib.parse.urlsplit(auth_res3.headers["location"]).query)["state"][0]
+        with patch.object(server, "_exchange_google_code", side_effect=RuntimeError("SECRET_INTERNAL_TRACE")):
+            fail_cb = self.client.get(f"/auth/google/callback?code=c3&state={state3}", follow_redirects=False)
+        self.assertEqual(fail_cb.status_code, 502)
+        self.assertNotIn("SECRET_INTERNAL_TRACE", fail_cb.json()["detail"])
 
         out_res = self.client.post("/auth/logout", follow_redirects=False)
         self.assertEqual(out_res.status_code, 302)
@@ -441,6 +472,97 @@ class TestPhase5Api(unittest.TestCase):
         )
         self.assertEqual(r31.status_code, 429)
         fresh.close()
+
+    def test_security_middleware_headers_csrf_body_cap_docs_hidden_and_proxy_poison(self) -> None:
+        # 1. OpenAPI / Swagger hidden by default -> 404
+        for doc_path in ("/docs", "/redoc", "/openapi.json"):
+            self.assertEqual(self.client.get(doc_path).status_code, 404)
+
+        # 2. Security headers & Cache-Control: no-store on /api/*
+        me_res = self.client.get("/api/me")
+        hdrs = {k.lower(): v for k, v in me_res.headers.items()}
+        self.assertEqual(hdrs.get("x-content-type-options"), "nosniff")
+        self.assertEqual(hdrs.get("x-frame-options"), "DENY")
+        self.assertEqual(hdrs.get("referrer-policy"), "strict-origin-when-cross-origin")
+        self.assertIn("camera=()", hdrs.get("permissions-policy", ""))
+        self.assertEqual(hdrs.get("cache-control"), "no-store")
+
+        # 3. Body-Cap 256 KB (both Content-Length and chunked stream without Content-Length) -> 413
+        big_payload = json.dumps({"target": "S01", "pad": "x" * 270_000})
+        cap_res = self.client.post(
+            "/api/scan",
+            content=big_payload,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(cap_res.status_code, 413)
+
+        def _chunked_big():
+            for _ in range(10):
+                yield b"x" * 32_768
+
+        chunked_res = self.client.post(
+            "/api/scan",
+            content=_chunked_big(),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(chunked_res.status_code, 413)
+
+        # 4. CSRF Origin mismatch -> 403 Forbidden (while same-origin passes)
+        csrf_bad = self.client.post(
+            "/api/scan",
+            json={"target": "S01"},
+            headers={"Origin": "https://evil.example.com"},
+        )
+        self.assertEqual(csrf_bad.status_code, 403)
+        csrf_null = self.client.post(
+            "/api/scan",
+            json={"target": "S01"},
+            headers={"Origin": "null"},
+        )
+        self.assertEqual(csrf_null.status_code, 403)
+        csrf_ok = self.client.post(
+            "/api/scan",
+            json={"target": "S01"},
+            headers={"Origin": "http://testserver"},
+        )
+        self.assertEqual(csrf_ok.status_code, 200)
+
+        # 5. Untrusted peer cannot poison X-Forwarded-Proto / X-Forwarded-Host
+        poison_auth = self.client.get(
+            "/auth/google",
+            headers={"x-forwarded-proto": "https", "x-forwarded-host": "evil.com"},
+            follow_redirects=False,
+        )
+        self.assertEqual(poison_auth.status_code, 302)
+        poison_qs = urllib.parse.parse_qs(urllib.parse.urlsplit(poison_auth.headers["location"]).query)
+        self.assertEqual(poison_qs["redirect_uri"], ["http://testserver/auth/google/callback"])
+
+        # Trusted loopback proxy with malformed X-Forwarded-Host -> 400; IPv6 [::1]:8000 allowed
+        proxy_client = TestClient(
+            self.app,
+            base_url="https://repoksv.tuanpq.com",
+            client=("127.0.0.1", 50000),
+        )
+        bad_xfh = proxy_client.get(
+            "/auth/google",
+            headers={"x-forwarded-host": "evil.com@victim.com"},
+            follow_redirects=False,
+        )
+        self.assertEqual(bad_xfh.status_code, 400)
+        ipv6_auth = proxy_client.get(
+            "/auth/google",
+            headers={"host": "[::1]:8000"},
+            follow_redirects=False,
+        )
+        self.assertEqual(ipv6_auth.status_code, 302)
+        proxy_client.close()
+
+        # 6. Pydantic max_length enforcement -> 422
+        too_long = self.client.post(
+            "/api/viva/ask",
+            json={"scan_id": "s1", "member_name": "a" * 121},
+        )
+        self.assertEqual(too_long.status_code, 422)
 
 
 if __name__ == "__main__":

@@ -120,12 +120,19 @@ def _select_study_concepts(session: dict[str, Any], profile: Any) -> list[dict[s
     return sorted(target, key=lambda c: int(c.get("bloom_level", 0)))
 
 
+def _sanitize_tsv_cell(text: str) -> str:
+    """Xoá tab/xuống dòng thô và chặn CSV/TSV formula injection (=, +, -, @)."""
+    cleaned = str(text or "").replace("\t", "    ")
+    cleaned = cleaned.replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
+    if cleaned.lstrip().startswith(("=", "+", "-", "@")):
+        cleaned = "'" + cleaned
+    return cleaned
+
+
 def _tsv_cell(text: str) -> str:
-    """Escape HTML và loại bỏ tab/xuống dòng thô để giữ nguyên 3 cột TSV."""
+    """Escape HTML, chặn formula injection và giữ nguyên 3 cột TSV."""
     escaped = html.escape(str(text or ""), quote=True)
-    escaped = escaped.replace("\t", "    ")
-    escaped = escaped.replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
-    return escaped
+    return _sanitize_tsv_cell(escaped)
 
 
 def _format_card_front(item: dict[str, Any], source_label: str) -> str:
@@ -188,7 +195,7 @@ def export_anki_tsv(
         tags = f"repoksv bloom-L{level} {tag_slug} {concept_slug}"
         if repo_slug:
             tags = f"{tags} repo-{repo_slug}"
-        lines.append(f"{front}\t{back}\t{tags}")
+        lines.append(f"{front}\t{back}\t{_sanitize_tsv_cell(tags)}")
 
     return filename, "\n".join(lines) + "\n"
 

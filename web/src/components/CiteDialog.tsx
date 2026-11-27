@@ -32,12 +32,17 @@ export function CiteDialog({
       if (!dialog.open) {
         dialog.showModal();
       }
-      requestAnimationFrame(() => {
-        targetRowRef.current?.scrollIntoView({ block: "center" });
-      });
     } else if (dialog.open) {
       dialog.close();
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const rafId = requestAnimationFrame(() => {
+      targetRowRef.current?.scrollIntoView({ block: "center" });
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [open, lines, targetLine]);
 
   useEffect(() => {

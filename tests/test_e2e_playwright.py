@@ -157,8 +157,15 @@ class TestE2EPlaywright(unittest.TestCase):
             tab_viva = page.get_by_role("tab", name="Vấn đáp Bloom")
             tab_export = page.get_by_role("tab", name="Xuất file")
 
+            tab_audit.click()
             tab_audit.focus()
+            page.wait_for_function(
+                "document.activeElement && document.activeElement.getAttribute('role') === 'tab'"
+            )
             page.keyboard.press("ArrowRight")
+            page.wait_for_function(
+                "document.querySelector('[role=\"tab\"][aria-selected=\"true\"]')?.textContent?.includes('Vấn đáp Bloom')"
+            )
             self.assertEqual(tab_viva.get_attribute("aria-selected"), "true")
             page.keyboard.press("ArrowRight")
             self.assertEqual(tab_export.get_attribute("aria-selected"), "true")

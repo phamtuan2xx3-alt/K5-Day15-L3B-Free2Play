@@ -8,6 +8,7 @@ import unittest
 
 from codebase.db import DEFAULT_DB_PATH, RepoKsvDB, slugify
 from codebase.exporters import (
+    _sanitize_tsv_cell,
     export_anki_tsv,
     export_etude_pack_json,
     export_markdown_guide,
@@ -359,6 +360,13 @@ class TestPhase4StoreAndExport(unittest.TestCase):
         self.assertEqual(pack_empty["etude"], "pack/1")
         self.assertEqual(len(pack_empty["items"]), 1)
         self.assertEqual(pack_empty["items"][0]["type"], "free")
+
+        # Anti-CSV/TSV Formula Injection (DDE)
+        for prefix in ("=cmd|' /C calc'!A0", "+1+1", "-2+3", "@SUM(1,1)"):
+            sanitized = _sanitize_tsv_cell(prefix + "\t\n")
+            self.assertTrue(sanitized.startswith("'"))
+            self.assertNotIn("\t", sanitized)
+            self.assertNotIn("\n", sanitized)
 
     def test_concurrency_15_threads_wal_no_locked_errors(self) -> None:
         self.db.upsert_user("u-load", display_name="Load Tester")

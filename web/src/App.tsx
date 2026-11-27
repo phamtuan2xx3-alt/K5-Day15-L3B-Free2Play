@@ -254,14 +254,18 @@ export function App() {
       });
       try {
         const res = await getFileLines(activeSession.scan_id, file, line);
-        setCiteState({
-          open: true,
-          file: res.file,
-          line: res.target_line ?? line,
-          lines: res.lines,
-          loading: false,
-          error: null,
-        });
+        setCiteState((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                file: res.file,
+                line: res.target_line ?? line,
+                lines: res.lines,
+                loading: false,
+                error: null,
+              }
+            : prev,
+        );
       } catch (err) {
         setCiteState((prev) => ({
           ...prev,

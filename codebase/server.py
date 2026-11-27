@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Bảo đảm import đồng nhất dù chạy từ root (`codebase.server`) hay từ `codebase/` (`server`)
 _CODEBASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +50,10 @@ SCAN_WINDOW_S = 60
 LLM_DAILY_LIMIT = 30
 LLM_WINDOW_S = 86400
 MAX_RAM_SCANS = 40
+MAX_BODY_BYTES = 262_144
 
+logger = logging.getLogger("repoksv.server")
+_SAFE_HOST_RE = re.compile(r"^[A-Za-z0-9.\[\]:-]{1,253}$")
 _PROCESS_FALLBACK_SECRET = secrets.token_urlsafe(32)
 _VIVA_META_TAG_RE = re.compile(r"\[VIVA_META_JSON\].*?\[/VIVA_META_JSON\]", re.DOTALL | re.IGNORECASE)
 _BLOOM_DRAFT_TAG_RE = re.compile(
@@ -90,17 +93,22 @@ def _b64u_decode(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + pad)
 
 
-def sign_token(payload: dict[str, Any], ttl_seconds: int = SESSION_TTL_S) -> str:
-    """Ký payload JSON bằng HMAC-SHA256 dạng base64url(payload).base64url(sig)."""
+def sign_token(
+    payload: dict[str, Any],
+    ttl_seconds: int = SESSION_TTL_S,
+    typ: str = "generic",
+) -> str:
+    """Ký payload JSON bằng HMAC-SHA256 dạng base64url(payload).base64url(sig) kèm domain _typ."""
     data = dict(payload)
+    data["_typ"] = typ
     data.setdefault("exp", int(time.time()) + ttl_seconds)
     raw_b64 = _b64u_encode(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     sig = hmac.new(_get_session_secret(), raw_b64.encode("ascii"), hashlib.sha256).digest()
     return f"{raw_b64}.{_b64u_encode(sig)}"
 
 
-def verify_token(token: str | None) -> dict[str, Any] | None:
-    """Xác thực chữ ký HMAC-SHA256 và hạn dùng của token."""
+def verify_token(token: str | None, expected_typ: str | None = None) -> dict[str, Any] | None:
+    """Xác thực chữ ký HMAC-SHA256, miền token (_typ) và hạn dùng."""
     if not token or "." not in token:
         return None
     raw_b64, sig_b64 = token.split(".", 1)
@@ -117,15 +125,44 @@ def verify_token(token: str | None) -> dict[str, Any] | None:
         return None
     if not isinstance(payload, dict):
         return None
+    if expected_typ is not None and payload.get("_typ") != expected_typ:
+        return None
     exp = payload.get("exp")
     if isinstance(exp, (int, float)) and time.time() > float(exp):
         return None
     return payload
 
 
+def _is_trusted_proxy_peer(request: Request) -> bool:
+    peer = request.client.host if request.client else ""
+    return peer in {"127.0.0.1", "::1"}
+
+
 def _is_https_request(request: Request) -> bool:
-    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
-    return proto == "https"
+    if _is_trusted_proxy_peer(request):
+        xf_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        if xf_proto:
+            return xf_proto == "https"
+    return (request.url.scheme or "").lower() == "https"
+
+
+def _trusted_request_host(request: Request) -> str:
+    """Trích host hợp lệ, chỉ tin X-Forwarded-Host khi đi qua proxy loopback."""
+    if _is_trusted_proxy_peer(request):
+        xf_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+        if xf_host:
+            if not _SAFE_HOST_RE.fullmatch(xf_host):
+                raise HTTPException(status_code=400, detail="Host không hợp lệ.")
+            return xf_host
+    hdr_host = (request.headers.get("host") or "").strip()
+    if hdr_host:
+        if not _SAFE_HOST_RE.fullmatch(hdr_host):
+            raise HTTPException(status_code=400, detail="Host không hợp lệ.")
+        return hdr_host
+    netloc = (request.url.netloc or "").strip()
+    if not netloc or not _SAFE_HOST_RE.fullmatch(netloc):
+        raise HTTPException(status_code=400, detail="Host không hợp lệ.")
+    return netloc
 
 
 def _session_cookie_name(request: Request) -> str:
@@ -157,7 +194,7 @@ def _google_redirect_uri(request: Request) -> str:
     if configured:
         return configured
     scheme = "https" if _is_https_request(request) else request.url.scheme
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    host = _trusted_request_host(request)
     return f"{scheme}://{host}/auth/google/callback"
 
 
@@ -376,46 +413,53 @@ class ScanRequest(BaseModel):
 
 
 class VivaAskRequest(BaseModel):
-    scan_id: str = Field(..., min_length=1)
-    member_name: str = ""
-    topic: str | None = None
+    scan_id: str = Field(..., min_length=1, max_length=120)
+    member_name: str = Field(default="", max_length=120)
+    topic: str | None = Field(default=None, max_length=300)
 
 
 class VivaDefenseRequest(BaseModel):
-    scan_id: str = Field(..., min_length=1)
-    member_name: str = ""
-    question: str = ""
-    answer: str = Field(..., min_length=1)
+    scan_id: str = Field(..., min_length=1, max_length=120)
+    member_name: str = Field(default="", max_length=120)
+    question: str = Field(default="", max_length=2000)
+    answer: str = Field(..., min_length=1, max_length=8000)
     viva_meta: dict[str, Any] | str | None = None
+
+    @field_validator("viva_meta")
+    @classmethod
+    def _validate_viva_meta_len(cls, v: Any) -> Any:
+        if isinstance(v, str) and len(v) > 8192:
+            raise ValueError("viva_meta vượt quá 8192 ký tự.")
+        return v
 
 
 class VivaCoachRequest(BaseModel):
-    scan_id: str = Field(..., min_length=1)
-    member_name: str = ""
-    goal: str | None = None
+    scan_id: str = Field(..., min_length=1, max_length=120)
+    member_name: str = Field(default="", max_length=120)
+    goal: str | None = Field(default=None, max_length=500)
 
 
 class ConfirmLogRequest(BaseModel):
-    scan_id: str | None = None
-    member_name: str = ""
+    scan_id: str | None = Field(default=None, max_length=120)
+    member_name: str = Field(default="", max_length=120)
     entry_id: int | None = None
     draft: dict[str, Any] | None = None
-    concept_key: str | None = None
-    status: str | None = None
+    concept_key: str | None = Field(default=None, max_length=120)
+    status: str | None = Field(default=None, max_length=40)
 
 
 class CardStatusRequest(BaseModel):
-    scan_id: str | None = None
-    member_name: str = ""
-    concept_key: str = Field(..., min_length=1)
-    status: str = Field(..., min_length=1)
+    scan_id: str | None = Field(default=None, max_length=120)
+    member_name: str = Field(default="", max_length=120)
+    concept_key: str = Field(..., min_length=1, max_length=120)
+    status: str = Field(..., min_length=1, max_length=40)
 
 
 def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     """Khởi tạo FastAPI app gắn SQLite WAL (cho phép truyền db_path riêng khi test)."""
     ai.load_env()
     if not (os.environ.get("SESSION_SECRET") or "").strip():
-        logging.getLogger("repoksv.server").warning(
+        logger.warning(
             "SESSION_SECRET chưa được cấu hình trong .env — đang dùng khóa tạm theo process; "
             "khi chạy --workers 2 cần đặt SESSION_SECRET chung trong .env để tránh lệch cookie/OAuth giữa các worker."
         )
@@ -423,9 +467,85 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     store = db_mod.RepoKsvDB(effective_db_path)
     ram_scan_files: OrderedDict[str, dict[str, str]] = OrderedDict()
 
-    app = FastAPI(title="RepoKSV API", version="1.0.0")
+    enable_docs = _env_bool("ENABLE_API_DOCS", False)
+    app = FastAPI(
+        title="RepoKSV API",
+        version="1.0.0",
+        docs_url="/docs" if enable_docs else None,
+        redoc_url="/redoc" if enable_docs else None,
+        openapi_url="/openapi.json" if enable_docs else None,
+    )
     app.state.db = store
     app.state.ram_scan_files = ram_scan_files
+
+    def _attach_security_headers(resp: Response, path: str) -> Response:
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if path.startswith(("/api/", "/auth/")) or path in {"/api", "/auth"}:
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.middleware("http")
+    async def security_middleware(request: Request, call_next: Any) -> Response:
+        path = request.url.path
+        cl_hdr = request.headers.get("content-length")
+        if cl_hdr is not None:
+            try:
+                if int(cl_hdr) > MAX_BODY_BYTES:
+                    return _attach_security_headers(
+                        JSONResponse({"detail": "Payload vượt quá giới hạn 256 KB."}, status_code=413),
+                        path,
+                    )
+            except ValueError:
+                return _attach_security_headers(
+                    JSONResponse({"detail": "Content-Length không hợp lệ."}, status_code=400),
+                    path,
+                )
+
+        if request.method.upper() in {"POST", "PUT", "DELETE", "PATCH"}:
+            chunks: list[bytes] = []
+            total_bytes = 0
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                total_bytes += len(chunk)
+                if total_bytes > MAX_BODY_BYTES:
+                    return _attach_security_headers(
+                        JSONResponse({"detail": "Payload vượt quá giới hạn 256 KB."}, status_code=413),
+                        path,
+                    )
+                chunks.append(chunk)
+            request._body = b"".join(chunks)
+            origin = (request.headers.get("origin") or "").strip()
+            if origin:
+                if origin.lower() == "null":
+                    return _attach_security_headers(
+                        JSONResponse({"detail": "Origin không hợp lệ (CSRF check)."}, status_code=403),
+                        path,
+                    )
+                parsed_origin = urllib.parse.urlsplit(origin)
+                origin_host = (parsed_origin.netloc or "").lower()
+                try:
+                    target_host = _trusted_request_host(request).lower()
+                except HTTPException as exc:
+                    return _attach_security_headers(
+                        JSONResponse({"detail": exc.detail}, status_code=exc.status_code),
+                        path,
+                    )
+                if (
+                    parsed_origin.scheme.lower() not in {"http", "https"}
+                    or not origin_host
+                    or origin_host != target_host
+                ):
+                    return _attach_security_headers(
+                        JSONResponse({"detail": "Origin không khớp host máy chủ (CSRF check)."}, status_code=403),
+                        path,
+                    )
+
+        resp = await call_next(request)
+        return _attach_security_headers(resp, path)
 
     assets_dir = os.path.join(WEB_DIST_DIR, "assets")
     if os.path.isdir(assets_dir):
@@ -441,7 +561,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         """Lấy owner_user_id từ cookie session Google hoặc guest demo anon:<id>."""
         for cname in (SESSION_COOKIE_HTTPS, SESSION_COOKIE_HTTP):
             tok = request.cookies.get(cname)
-            payload = verify_token(tok)
+            payload = verify_token(tok, expected_typ="session")
             if payload and payload.get("user_id"):
                 uid = str(payload["user_id"])
                 user = store.get_user(uid)
@@ -452,13 +572,13 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Vui lòng đăng nhập Google để tiếp tục.")
 
         anon_tok = request.cookies.get(ANON_COOKIE)
-        anon_payload = verify_token(anon_tok)
+        anon_payload = verify_token(anon_tok, expected_typ="anon")
         if anon_payload and anon_payload.get("anon_id"):
             anon_id = str(anon_payload["anon_id"])
         else:
             anon_id = secrets.token_hex(12)
             if response is not None:
-                signed_anon = sign_token({"anon_id": anon_id}, ttl_seconds=SESSION_TTL_S)
+                signed_anon = sign_token({"anon_id": anon_id}, ttl_seconds=SESSION_TTL_S, typ="anon")
                 response.set_cookie(
                     ANON_COOKIE,
                     signed_anon,
@@ -541,7 +661,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     def get_me(request: Request, response: Response) -> dict[str, Any]:
         allow_guest = _env_bool("ALLOW_GUEST_DEMO", False)
         for cname in (SESSION_COOKIE_HTTPS, SESSION_COOKIE_HTTP):
-            payload = verify_token(request.cookies.get(cname))
+            payload = verify_token(request.cookies.get(cname), expected_typ="session")
             if payload and payload.get("user_id"):
                 user = store.get_user(str(payload["user_id"]))
                 if user is not None:
@@ -604,7 +724,11 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             url=f"https://accounts.google.com/o/oauth2/v2/auth?{params}",
             status_code=302,
         )
-        oauth_tok = sign_token({"state": state, "code_verifier": code_verifier}, ttl_seconds=OAUTH_TTL_S)
+        oauth_tok = sign_token(
+            {"state": state, "code_verifier": code_verifier},
+            ttl_seconds=OAUTH_TTL_S,
+            typ="oauth",
+        )
         resp.set_cookie(
             OAUTH_STATE_COOKIE,
             oauth_tok,
@@ -624,10 +748,12 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         error: str | None = None,
     ) -> RedirectResponse:
         if error:
-            raise HTTPException(status_code=400, detail=f"Google OAuth bị từ chối: {error}")
+            safe_err = re.sub(r"[^A-Za-z0-9._ -]", "", error)[:64]
+            raise HTTPException(status_code=400, detail=f"Google OAuth bị từ chối: {safe_err}")
 
-        oauth_payload = verify_token(request.cookies.get(OAUTH_STATE_COOKIE))
-        if not oauth_payload or not state or oauth_payload.get("state") != state:
+        oauth_payload = verify_token(request.cookies.get(OAUTH_STATE_COOKIE), expected_typ="oauth")
+        expected_state = str(oauth_payload.get("state") or "") if oauth_payload else ""
+        if not oauth_payload or not state or not expected_state or not hmac.compare_digest(expected_state, state):
             raise HTTPException(status_code=400, detail="OAuth state không hợp lệ hoặc đã hết hạn.")
         if not code:
             raise HTTPException(status_code=400, detail="Thiếu authorization code từ Google.")
@@ -646,7 +772,8 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                 client_secret=client_secret,
             )
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Không đổi được mã Google OAuth: {exc}") from exc
+            logger.exception("Google OAuth token exchange failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Không đổi được mã Google OAuth.") from exc
 
         sub = str(userinfo.get("sub") or "").strip()
         if not sub:
@@ -659,16 +786,23 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             display_name=str(userinfo.get("name") or userinfo.get("email") or "Google User"),
             picture_url=str(userinfo.get("picture") or ""),
         )
-        session_tok = sign_token({"user_id": uid}, ttl_seconds=SESSION_TTL_S)
+        session_tok = sign_token({"user_id": uid}, ttl_seconds=SESSION_TTL_S, typ="session")
         resp = RedirectResponse(url="/", status_code=302)
-        resp.delete_cookie(OAUTH_STATE_COOKIE, path="/")
+        https_req = _is_https_request(request)
+        resp.delete_cookie(
+            OAUTH_STATE_COOKIE,
+            path="/",
+            secure=https_req,
+            httponly=True,
+            samesite="lax",
+        )
         resp.set_cookie(
             _session_cookie_name(request),
             session_tok,
             max_age=SESSION_TTL_S,
             httponly=True,
             samesite="lax",
-            secure=_is_https_request(request),
+            secure=https_req,
             path="/",
         )
         return resp
@@ -991,7 +1125,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             "rubric": first_card.get("rubric", ""),
             "common_misconceptions": first_card.get("common_misconceptions", []),
         }
-        viva_meta_token = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S)
+        viva_meta_token = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S, typ="viva_meta")
         entry = store.save_viva_entry(
             session["scan_id"],
             resolved_member,
@@ -1023,7 +1157,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
 
         viva_meta_dict: dict[str, Any] = {}
         if isinstance(req.viva_meta, str) and req.viva_meta:
-            decoded = verify_token(req.viva_meta)
+            decoded = verify_token(req.viva_meta, expected_typ="viva_meta")
             if decoded and isinstance(decoded.get("meta"), dict):
                 viva_meta_dict = decoded["meta"]
 
@@ -1105,7 +1239,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             "rubric": meta.get("rubric", ""),
             "common_misconceptions": meta.get("common_misconceptions", []),
         }
-        viva_meta_token = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S)
+        viva_meta_token = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S, typ="viva_meta")
         entry = store.save_viva_entry(
             session["scan_id"],
             resolved_member,
@@ -1261,6 +1395,8 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     def spa_catch_all(full_path: str) -> Response:
         if full_path.startswith(("api/", "auth/")) or full_path in {"api", "auth"}:
             raise HTTPException(status_code=404, detail="Endpoint không tồn tại.")
+        if not enable_docs and full_path in {"docs", "docs/", "redoc", "redoc/", "openapi.json"}:
+            raise HTTPException(status_code=404, detail="Not Found")
         index_html = os.path.join(WEB_DIST_DIR, "index.html")
         if os.path.isfile(index_html):
             return FileResponse(index_html, media_type="text/html; charset=utf-8")
