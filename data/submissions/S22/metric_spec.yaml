@@ -1,0 +1,11 @@
+metrics:
+  - name: "tra_loi_hay"
+    definition: "Trả lời hay, tự nhiên và làm người dùng hài lòng"
+    grader: "nguoi"
+    threshold: "tốt"
+    why: "Người dùng thích câu trả lời hay"
+  - name: "tu_choi_ngoai_bai"
+    definition: "Trả lời không có khi câu hỏi ngoài giáo trình"
+    grader: "code"
+    threshold: "100% câu tu_choi"
+    why: "Tránh bịa kiến thức"

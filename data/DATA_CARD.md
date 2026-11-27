@@ -15,17 +15,17 @@
 | Nhãn | thật (trích / viết lại từ tài liệu công khai) |
 | Giới hạn | Chỉ phủ rubric hackathon AI20K K5. Rubric lab ngày thường có thể khác — ngoài phạm vi, công cụ phải báo `"chưa kiểm được"` |
 
-## Dataset 2 · Hồ sơ bài nộp giả lập (`data/submissions/S01..S15/`)
+## Dataset 2 · Hồ sơ bài nộp giả lập (`data/submissions/S01..S25/`)
 
 | | |
 |---|---|
-| Dùng để làm gì | Đầu vào bản chạy thử và bộ câu thử: mỗi câu `S01`–`S15` trỏ tới một mini-repo giả lập tương ứng |
+| Dùng để làm gì | Đầu vào bản chạy thử và bộ câu thử: mỗi câu `S01`–`S25` trỏ tới một mini-repo giả lập tương ứng (trừ `S10` câu hỏi cụt và `S23` trỏ `S99` không tồn tại để kiểm HAX G10) |
 | Từ đâu | **Nhóm tự dựng** (mini-repo chỉ gồm `TEAMS.md`, `canvas.md`, `spec.md`, `evidence_summary.md` — tương ứng `evidence/summary.md` ở repo chuẩn, `benchmark.csv`, `meta.json` tuỳ ca), tên nhóm và tên người đều giả |
-| Xử lý những bước gì | Bắt đầu từ một bài sạch đạt đủ tiêu chí (`S01`) → script `data/make_submissions.py` (`seed = 42`) tạo 15 biến thể cài đúng lỗi thật từ đào data & khảo sát: bài sạch khác mẫu (`S08`), lỗi `TEAMS.md` (`S02`), pain có chữ `"AI"` (`S03`), PR nhầm repo gốc (`S04`), thiếu file (`S05`), lộ key giả `sk-TEST…` (`S06`), lệch số (`S07`), đổi chuẩn đạt (`S09`), thiếu file/cột CSV (`S11`), đa lỗi (`S12`), thiếu G10/Không làm (`S13`), prompt injection (`S14`), ca xin vượt thẩm quyền (`S15`) |
-| Số dòng / số đoạn | **15 hồ sơ mẫu `S01`–`S15` cho CP2** *(đã ghép đầy đủ từ `develop-vy`; sẽ mở rộng 20–30 hồ sơ trước CP3)* |
-| Phiên bản / ngày lấy | v1 (`seed = 42`, dựng 27/11/2026) |
+| Xử lý những bước gì | Bắt đầu từ một bài sạch đạt đủ tiêu chí (`S01`) → script `data/make_submissions.py` (`seed = 42`) tạo 25 biến thể cài đúng lỗi thật từ đào data & khảo sát: bài sạch (`S01`, `S08`, `S21` Track D), lỗi `TEAMS.md` (`S02`, `S20`), `canvas.md` có chữ `"AI"` (`S03`) / thiếu dòng (`S16`), PR nhầm repo gốc (`S04`), thiếu file (`S05`), lộ key giả `sk-TEST…` (`S06`) / `AIza…` + email (`S18`), lệch số (`S07`), đổi chuẩn đạt (`S09`), thiếu câu/cột CSV (`S11`), đa lỗi (`S12`), thiếu G10/Không làm (`S13`), thiếu ngưỡng R1 (`S17`), thiếu so sánh Impact R2 (`S19`), thiếu metric (`S22`), prompt injection (`S14`, `S24`), vượt thẩm quyền (`S15`, `S25`) |
+| Số dòng / số đoạn | **25 ca thử `S01`–`S25` (23 thư mục hồ sơ + 2 ca G10 không thư mục `S10`, `S23`) cho CP3** |
+| Phiên bản / ngày lấy | v2 (`seed = 42`, mở rộng từ 15 → 25 ca lúc 27/11/2026) |
 | Nhãn | `synthetic` |
-| Giới hạn | Lỗi cài sẵn sạch và rõ hơn lỗi ngoài đời; bài thật viết lộn xộn hơn. Key giả `sk-TEST…` không phải key thật — không bao giờ dùng key thật làm dữ liệu thử |
+| Giới hạn | Lỗi cài sẵn sạch và rõ hơn lỗi ngoài đời; bài thật viết lộn xộn hơn. Key giả `sk-TEST…` / `AIzaSyDummy…` không phải key thật — không bao giờ dùng key thật làm dữ liệu thử |
 
 **Cách sinh:** script `data/make_submissions.py` · `seed = 42` · người kiểm: Cặp X (Tuấn & Vỹ) kiểm chéo trước khi chạy Lượt 1.
 Data tự dựng **không phải bằng chứng pain**.
@@ -37,7 +37,7 @@ Data tự dựng **không phải bằng chứng pain**.
 | Dùng để làm gì | Bằng chứng pain (R1, chi tiết ở `evidence/`) · nguồn câu thử có `source = nguoi_dung: …` (đảm bảo ≥1/3 bộ câu thử) |
 | Từ đâu | Khảo sát Google Form học viên L3 (`evidence/survey/questions.md`, mở 27/11/2026 17:31) · phỏng vấn học viên ngoài nhóm và Lab Coach tại phòng C401 (`evidence/interviews/GUIDE.md`) |
 | Xử lý những bước gì | Xoá hoàn toàn cột liên hệ Câu 8 (học viên) & Câu C5 (Lab Coach) và dấu thời gian nhận diện trước khi commit · ghi `P1`, `P2`… kèm vai, không tên · trích tối đa 1–2 câu · lỗi người dùng kể được viết lại thành biến thể hồ sơ giả lập (không chép bài nộp thật của ai) |
-| Số dòng / số đoạn | `evidence/survey/results.csv`: **26 phiếu HV** (bỏ 1 HV chưa nộp `R14` → **`n = 25` đạt ngưỡng R1**) + `evidence/survey/results-labcoach.csv`: **2 phiếu Lab Coach** + script đếm `evidence/survey/tally.py` · `evidence/interviews/P1.md`..`P4.md` (ghi nhận trung thực trùng form / chưa theo Mom Test, không tính nguồn đạt ngưỡng riêng) · `eval/benchmark.csv` hiện dẫn chiếu **5 câu** nguồn `nguoi_dung` (`R01`, `R03`, `R05`, `R06`) |
+| Số dòng / số đoạn | `evidence/survey/results.csv`: **26 phiếu HV** (bỏ 1 HV chưa nộp `R14` → **`n = 25` đạt ngưỡng R1**) + `evidence/survey/results-labcoach.csv`: **2 phiếu Lab Coach** + script đếm `evidence/survey/tally.py` · `evidence/interviews/P1.md`..`P4.md` (ghi nhận trung thực trùng form / chưa theo Mom Test, không tính nguồn đạt ngưỡng riêng) · `eval/benchmark.csv` hiện dẫn chiếu **10 câu** nguồn `nguoi_dung` (`R01`, `R03`, `R05`, `R06`, `R07`, `R10`, `R17`, `R18`, `R21`, `R23`, `R24`, `R25`, `R26`) và **3 câu** nguồn `data_that` (tổng 13/25 = 52% ≥ 1/3) |
 | Phiên bản / ngày lấy | 27–28/11/2026 |
 | Nhãn | thật |
 | Giới hạn | Mẫu chủ yếu học viên L3B cùng lớp, trẻ và rành công cụ; người trả lời khảo sát thường là người quan tâm hơn mức trung bình |
