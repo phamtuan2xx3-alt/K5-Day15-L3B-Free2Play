@@ -35,3 +35,9 @@ evidence/**/raw-*
 # Nguyên file data BTC cấp (data/preclass, data/training-ops… của repo đề): để ở đây, không commit
 data-btc
 data-btc/
+# Index cục bộ, log học tập cá nhân & dependencies web build (không commit)
+.gitnexus/
+.study_logs/
+web/node_modules/
+.cloudflare/
+*.tsbuildinfo
