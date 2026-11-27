@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--serve", action="store_true", help="Khởi chạy FastAPI Web UI server")
     parser.add_argument("--host", default="127.0.0.1", help="Host lắng nghe khi --serve")
     parser.add_argument("--port", type=int, default=8000, help="Port lắng nghe khi --serve")
-    parser.add_argument("--scan", default="", help="Quét nhanh 1 hồ sơ S01..S25 hoặc GitHub URL")
+    parser.add_argument("--scan", default="", help="Quét nhanh 1 hồ sơ S01..S30 hoặc GitHub URL")
     args = parser.parse_args(argv)
 
     if args.serve:

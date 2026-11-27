@@ -321,7 +321,7 @@ export function App() {
             ) : !activeSession ? (
               <div className="tabpanel-inner">
                 <h1 style={{ fontSize: "1.35rem", marginTop: 0 }}>
-                  {scanning ? "Đang quét…" : "Chọn S01–S25 hoặc dán link GitHub"}
+                  {scanning ? "Đang quét…" : "Chọn S01–S30 hoặc dán link GitHub"}
                 </h1>
                 {submissions.length > 0 && (
                   <div className="action-row">

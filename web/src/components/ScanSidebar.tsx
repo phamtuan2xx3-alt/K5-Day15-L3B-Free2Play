@@ -50,7 +50,7 @@ export function ScanSidebar({
         <p style={{ color: "var(--ink-muted)", fontSize: "0.88rem" }}>Đang tải lịch sử…</p>
       ) : sessions.length === 0 ? (
         <p style={{ color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-          Chưa có phiên quét nào. Chọn <code>S01..S25</code> hoặc dán link GitHub ở thanh trên để bắt đầu.
+          Chưa có phiên quét nào. Chọn <code>S01..S30</code> hoặc dán link GitHub ở thanh trên để bắt đầu.
         </p>
       ) : (
         <ul className="session-list scroller">

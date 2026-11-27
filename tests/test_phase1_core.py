@@ -254,6 +254,34 @@ class TestPhase1AgentFakeMode(unittest.TestCase):
         self.assertIn("Đội trưởng phải nằm ở dòng thành viên số 1", out_s25)
         self.assertEqual(sum_s25["model_calls"], 1)
 
+    def test_expanded_s26_to_s30_cases(self):
+        out_s26, _ = self._run_case("S26")
+        self.assertIn("PENALTY-KEY", out_s26)
+        self.assertIn("meta.json:L0", out_s26)
+
+        out_s27, _ = self._run_case("S27")
+        self.assertIn("TEAMS-FORMAT", out_s27)
+        self.assertIn("TEAMS.md:L10", out_s27)
+        self.assertIn("3–5", out_s27)
+
+        out_s28, _ = self._run_case("S28")
+        self.assertIn("PUBLIC-ACCESS", out_s28)
+        self.assertIn("R4-BENCHMARK", out_s28)
+        self.assertIn("meta.json:L0", out_s28)
+        self.assertIn("benchmark.csv:L01", out_s28)
+
+        out_s29, _ = self._run_case("S29")
+        self.assertIn("Không phát hiện lỗi cứng", out_s29)
+        self.assertIn("Không thiếu", out_s29)
+        self.assertNotIn("[TEAMS-FORMAT]", out_s29)
+        self.assertNotIn("[PENALTY-", out_s29)
+        self.assertNotIn("[PUBLIC-ACCESS]", out_s29)
+
+        out_s30, sum_s30 = self._run_case("S30")
+        self.assertIn("TỪ CHỐI YÊU CẦU", out_s30)
+        self.assertIn("PENALTY-STANDARD", out_s30)
+        self.assertEqual(sum_s30["model_calls"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

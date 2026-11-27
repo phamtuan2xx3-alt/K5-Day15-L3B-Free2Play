@@ -121,11 +121,11 @@ export function TopBar({
             className="scan-input"
             value={targetInput}
             onChange={(e) => onTargetInputChange(e.target.value)}
-            placeholder="https://github.com/owner/repo hoặc S01–S25…"
+            placeholder="https://github.com/owner/repo hoặc S01–S30…"
           />
 
           <select
-            aria-label="Chọn nhanh hồ sơ mẫu S01 đến S25"
+            aria-label="Chọn nhanh hồ sơ mẫu S01 đến S30"
             className="sample-select"
             value={/^S\d{2}$/i.test(targetInput.trim()) ? targetInput.trim().toUpperCase() : ""}
             onChange={(e) => {
@@ -136,7 +136,7 @@ export function TopBar({
               }
             }}
           >
-            <option value="">Mẫu S01–S25…</option>
+            <option value="">Mẫu S01–S30…</option>
             {submissions.map((sub) => (
               <option key={sub.id} value={sub.id}>
                 {sub.id}
