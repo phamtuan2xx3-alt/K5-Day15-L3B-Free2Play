@@ -7,7 +7,7 @@
 
 | Nguồn | Đạt ngưỡng? | File |
 |---|---|---|
-| Đào data (x/N, %, cách đếm chạy lại được, ≥5 ví dụ) | ☑ | `evidence/data-mining.md`, `evidence/mine_repos.py` |
+| Đào data (x/N, %, cách đếm chạy lại được, ≥5 ví dụ) | ☑ | `evidence/data-mining.md`, `evidence/mine_repos.py`, `evidence/mine_prs.py` |
 | Khảo sát (≥20 người ngoài nhóm, đúng người dùng) | ☑ **n = 25** học viên đã nộp bài (chốt lúc 19:20 27/11) | `evidence/survey/results.csv`, `evidence/survey/tally.py` |
 | Phỏng vấn (≥3 người ngoài nhóm, đúng người dùng) | ☐ 3 trao đổi ngắn với học viên (P1–P3): hỏi lại câu của form, trả lời trùng form, không có thông tin mới · 1 buổi lab coach (P4, không theo Mom Test) → không tính là nguồn đạt ngưỡng riêng | `evidence/interviews/P1.md`…`P4.md` |
 
@@ -15,7 +15,8 @@
 
 Chạy lại: `python evidence/survey/tally.py`. Khảo sát mở 17:31, 28 phiếu: 26 học viên + 2 lab coach. Bỏ 1 học viên chưa nộp lần nào → **n = 25** (L3B 20, L3A 5).
 
-- **Đào data** (N = 135 repo sau CP1): **18/135 (13%)** repo thiếu hoặc chưa qua `check_teams()` của BTC · **6/135 (4%)** có chữ "AI" ở dòng pain, lỗi mà `run.py check` không bắt.
+- **Đào data lần 1** (N = 135 repo sau CP1): **18/135 (13%)** repo thiếu hoặc chưa qua `check_teams()` của BTC · **6/135 (4%)** có chữ "AI" ở dòng pain, lỗi mà `run.py check` không bắt.
+- **Đào data lần 2 — PR nhầm vào repo đề gốc** (19 repo đề lab L3 K5, chạy 23:30 27/11): **865 PR từ ít nhất 436 tài khoản** mở nhầm vào **17/19 repo đề**; **851/865 (98%)** mở từ chính repo nộp bài; 230 tài khoản nhầm hơn 1 lần · **283/865 (33%) vẫn còn mở** · **9 PR bị merge vào repo đề** · PR được đóng thì trung vị **1 phút** sau khi mở, 98% do chính người mở tự đóng.
 - **Khảo sát học viên** (n = 25):
   - Nộp nhiều: **16/25 (64%)** nộp trên 12 lần / 14 ngày.
   - Phát hiện lỗi sát giờ / sau khi nộp ≥1 lần trong 14 ngày: **20/25 (80%)**; 2–3 lần: 13/25 (52%).
@@ -45,25 +46,26 @@ Chạy lại: `python evidence/survey/tally.py`. Khảo sát mở 17:31, 28 phi�
 
 - **Khớp:** đào data thấy 13% repo vẫn lỗi `TEAMS.md` dù có sẵn `run.py check`. Khảo sát thấy **13/16 người có chạy script check vẫn gặp ≥1 sự cố**, 9/25 nộp sót file / sai format, và 2/2 lab coach nêu lỗi này đầu tiên.
 - **Chưa đủ để thay cho AI ngoài (trả lời câu hỏi "khác gì agent có sẵn?"):** trong 15 người đã dán bài vào AI ngoài, **11/15 vẫn gặp sự cố** và **6/15 vẫn PR / push nhầm repo gốc**. Lỗi PR nhầm nằm ở **trạng thái git / GitHub** (remote, đích của PR), không nằm trong phần bài được dán vào chat. Script check cũng không kiểm lỗi này.
-- **Lệch:** đào data chỉ đo được lỗi format ở CP1, chưa đo được PR nhầm repo gốc. Có thể đếm thêm bằng cách đếm PR học viên mở nhầm vào repo gốc của khoá (cách đếm viết trước, chạy sau).
+- **Khớp (PR nhầm):** khảo sát 13/25 (52%) kể từng PR / push nhầm repo gốc; đào data lần 2 thấy **ít nhất 436 tài khoản** đã làm vậy trên 17/19 repo đề L3, 98% từ repo nộp bài.
+- **Lệch (PR nhầm):** người nhầm thường tự phát hiện rất nhanh (trung vị 1 phút) → mỗi lần nhầm **không tốn nhiều thời gian sửa**. Cái giá thật là phần **không ai phát hiện**: 33% PR vẫn mở (bài nộp nằm công khai trong repo đề), 9 PR bị merge vào repo đề.
 
 ## 5. Kết luận
 
 Giả thuyết ở `evidence/hypothesis.md` (≥60% n ≥ 20 từng nộp sót mục / thiếu nguồn / sai tiêu chí hoặc mất ≥15 phút dò):
 - **Đúng chữ giả thuyết: 15/25 (60%), vừa chạm ngưỡng.** Tính cả các sự cố khác ở câu 5 (PR nhầm, lộ key, lúng túng khi bị hỏi vặn): 21/25 (84%). Luật đếm hai bản này được viết lúc tổng hợp (sau khi thu phiếu), ghi rõ trong `tally.py`.
 - **Vế 2 (≥2/3 người phỏng vấn kể được lỗi script không bắt): chưa kiểm được.** 3 trao đổi ngắn với học viên (P1–P3) chỉ lặp lại câu của form, không ai kể lỗi script không bắt; 2 lab coach bỏ trống câu C4.
-- **Phải đổi trọng tâm:** pain lớn nhất là **PR / push nhầm repo gốc (52%)**, không phải dò rubric (chỉ 6/25 mất ≥16 phút). Trọng tâm nên là: kiểm trạng thái repo thật (đích PR, file .env, đủ file) bằng code, sau đó AI hỏi vặn.
+- **Phải đổi trọng tâm:** pain lớn nhất là **PR / push nhầm repo gốc (52% khảo sát · ≥436 tài khoản, 865 PR theo data)**, không phải dò rubric (chỉ 6/25 mất ≥16 phút). Trọng tâm nên là: kiểm trạng thái repo thật (đích PR, file .env, đủ file) bằng code **trước khi** nhầm, nhất là ca không ai tự phát hiện (33% PR còn mở), sau đó AI hỏi vặn.
 
 **Điều vẫn chưa biết:**
 - Có thành viên nhóm nào điền phiếu không (form ẩn danh).
-- Học viên mất bao lâu để sửa sau khi PR nhầm.
+- ~~Học viên mất bao lâu để sửa sau khi PR nhầm~~ → đào data lần 2: PR được đóng thì trung vị 1 phút; nhưng 33% không được đóng.
 - Hậu quả có phải mất điểm thật không: chỉ 2/25 nói bị trừ điểm hoặc phải sửa gấp.
 
 ## Tiến độ
 
 | Nguồn | Kế hoạch | Đã làm đến đâu |
 |---|---|---|
-| Đào data | Repo `K5-Day15-L3*` sau CP1 | Xong lần 1 (17:20), N = 135 · chạy lại sau CP3 |
+| Đào data | Repo `K5-Day15-L3*` sau CP1 · PR nhầm vào repo đề L3 | Xong lần 1 (17:20), N = 135 · **xong lần 2 PR nhầm (23:30 27/11)**: 865 PR / ≥436 tài khoản · lần 1 chạy lại sau CP3 |
 | Khảo sát | ≥20 học viên L3 ngoài nhóm | **Đạt: n = 25** (chốt 19:20 27/11) |
 | Phỏng vấn | ≥3 học viên ngoài nhóm + 1–2 lab coach | Xong: 3 học viên (P1–P3, trùng form, không có thông tin mới) + 1 lab coach (P4). Chưa đạt ngưỡng vì thiếu số và trích dẫn riêng |
 
