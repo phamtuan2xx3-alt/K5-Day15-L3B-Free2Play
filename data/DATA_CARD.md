@@ -9,7 +9,7 @@
 |---|---|
 | Dùng để làm gì | Nguồn cho công cụ `get_rubric(criteria_ids)` · căn cứ để AI đối chiếu bài nộp · căn cứ viết `expected` trong bộ câu thử |
 | Từ đâu | Bộ đề hackathon AI20K khoá 5 (repo đề công khai: `03-rubric.md`, `README.md` mục Luật chung, `01-challenge-brief.md` mục 7 hạng mục). **Viết lại rút gọn**, không chép nguyên văn cả file |
-| Xử lý những bước gì | Tách mỗi tiêu chí thành một mục JSON có mã (`R1.1`, `R2.1`, `R3.1`, `R4.1`, `PENALTY-KEY`, `PENALTY-STANDARD`, `GIT-FORK-PR`, `HAX-G10`…) gồm `id`, `title`, `check_type`, `rule`, `penalty` · người thứ hai đối chiếu từng mục với rubric gốc |
+| Xử lý những bước gì | Tách mỗi tiêu chí thành một mục JSON có mã (`TEAMS-FORMAT`, `CANVAS-7ROWS`, `GIT-FORK-PR`, `PENALTY-KEY`, `PENALTY-STANDARD`, `R1-EVIDENCE`, `R2-IMPACT`, `R3-DESIGN`, `R4-BENCHMARK`, `CROSS-CONSISTENCY`, `PROMPT-INJECTION`, `NO-AUTO-GRADE`) gồm `id`, `title`, `check_type`, `rule`, `penalty` · người thứ hai đối chiếu từng mục với rubric gốc |
 | Số dòng / số đoạn | **12 tiêu chí** (đã chốt trong `data/rubric.json`) |
 | Phiên bản / ngày lấy | Bộ đề bản commit `b568b95` trước khi tách starter-repo, đọc 27/11/2026 |
 | Nhãn | thật (trích / viết lại từ tài liệu công khai) |

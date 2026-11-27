@@ -84,8 +84,9 @@ Nhóm dùng stack khác (Node, Streamlit, notebook…): sửa hàm `run_app()` t
 
 | Thành phần | Thật / Giả | Ghi chú |
 |---|---|---|
-| Lời gọi AI ở quyết định trung tâm | **Thật** (bắt buộc từ CP3) | Model: ____ |
-|  |  |  |
+| Lời gọi AI ở quyết định trung tâm | **Giả tại CP2** (`MODEL_PROVIDER=fake`), chuyển **Thật** trước CP3 | `codebase/ai.py` hỗ trợ OpenAI / Gemini / DeepSeek / Anthropic / Ollama qua `.env` |
+| 5 công cụ kiểm luật cứng & hậu kiểm (`@tool`) | **Thật** | Chạy tất định bằng Python (`codebase/tools.py`) |
+| Hồ sơ bài nộp mẫu (`data/submissions/S01..S15/`) | **Giả lập (`synthetic`, `seed = 42`)** | Sinh bởi `data/make_submissions.py` từ lỗi thật, không chứa PII |
 
 ## Dùng AI vào việc gì
 
