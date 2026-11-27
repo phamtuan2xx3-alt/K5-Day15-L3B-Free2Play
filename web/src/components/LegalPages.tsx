@@ -26,13 +26,19 @@ export function LegalPage({ route, onNavigate }: LegalPageProps) {
     return (
       <main id="main-content" className="static-page" tabIndex={-1}>
         {backLink}
-        <h1 style={{ marginTop: 0 }}>Đăng nhập RepoKSV</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+          <img src="/repoksv-logo-120.png" alt="Logo RepoKSV" className="brand-logo" width={42} height={42} />
+          <h1 style={{ margin: 0 }}>Đăng nhập RepoKSV</h1>
+        </div>
         <p>
           Đăng nhập qua Google OAuth 2.0 (PKCE) để lưu lịch sử phiên quét và hồ sơ thông hiểu Bloom L0–L6 riêng của bạn.
           RepoKSV chỉ yêu cầu 3 quyền cơ bản: <code>openid</code>, <code>email</code>, <code>profile</code>.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBlock: "1.25rem" }}>
-          <a className="btn btn-primary" href="/auth/google">
+          <a className="btn btn-primary btn-google" href="/auth/google">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M21.8 12.23c0-.68-.06-1.36-.18-2.02H12v3.83h5.5a4.7 4.7 0 0 1-2.04 3.09v2.56h3.3c1.93-1.78 3.04-4.4 3.04-7.46ZM12 22c2.75 0 5.06-.91 6.75-2.47l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2H2.89v2.64A10 10 0 0 0 12 22ZM6.3 13.74A5.98 5.98 0 0 1 6 12c0-.6.1-1.19.3-1.74V7.62H2.89A10 10 0 0 0 2 12c0 1.61.39 3.14 1.09 4.38l3.21-2.64ZM12 6.06c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.99 14.74 2 12 2a10 10 0 0 0-9.11 5.62l3.41 2.64C7.1 7.85 9.35 6.06 12 6.06Z" />
+            </svg>
             Google Sign-In
           </a>
           <a

@@ -212,6 +212,19 @@ a {
   font-size: 1.05rem;
 }
 
+.brand-logo {
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 2px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.btn-google {
+  gap: 0.45rem;
+}
+
 .brand-sub {
   display: block;
   font-size: 0.74rem;

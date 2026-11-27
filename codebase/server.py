@@ -1403,12 +1403,46 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
 
     # ── Static SPA & URL-Hack Catch-All ────────────────────────────────────
 
+    _PUBLIC_STATIC_MIME = {
+        "favicon.svg": "image/svg+xml",
+        "logo.svg": "image/svg+xml",
+        "repoksv-logo-120.png": "image/png",
+        "repoksv-avatar.png": "image/png",
+        "robots.txt": "text/plain; charset=utf-8",
+    }
+
+    def _serve_public_asset(asset_name: str) -> Response:
+        media_type = _PUBLIC_STATIC_MIME.get(asset_name)
+        if not media_type:
+            raise HTTPException(status_code=404)
+        fpath = os.path.join(WEB_DIST_DIR, asset_name)
+        if os.path.isfile(fpath):
+            return FileResponse(
+                fpath,
+                media_type=media_type,
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        raise HTTPException(status_code=404)
+
     @app.get("/favicon.svg", include_in_schema=False)
     def favicon() -> Response:
-        fav = os.path.join(WEB_DIST_DIR, "favicon.svg")
-        if os.path.isfile(fav):
-            return FileResponse(fav, media_type="image/svg+xml")
-        raise HTTPException(status_code=404)
+        return _serve_public_asset("favicon.svg")
+
+    @app.get("/logo.svg", include_in_schema=False)
+    def logo_svg() -> Response:
+        return _serve_public_asset("logo.svg")
+
+    @app.get("/repoksv-logo-120.png", include_in_schema=False)
+    def logo_png() -> Response:
+        return _serve_public_asset("repoksv-logo-120.png")
+
+    @app.get("/repoksv-avatar.png", include_in_schema=False)
+    def avatar_png() -> Response:
+        return _serve_public_asset("repoksv-avatar.png")
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots_txt() -> Response:
+        return _serve_public_asset("robots.txt")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_catch_all(full_path: str) -> Response:

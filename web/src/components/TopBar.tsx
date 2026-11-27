@@ -101,7 +101,7 @@ export function TopBar({
             onNavigate("/");
           }}
         >
-          <img src="/favicon.svg" alt="" width={32} height={32} />
+          <img src="/repoksv-logo-120.png" alt="" className="brand-logo" width={34} height={34} />
           <span>
             RepoKSV
             <span className="brand-sub">Kiểm Sát Viên · Free2Play</span>
@@ -214,7 +214,10 @@ export function TopBar({
                   Guest Demo{typeof me.guest_remaining === "number" ? ` (${me.guest_remaining})` : ""}
                 </span>
               ) : null}
-              <a href="/auth/google" className="btn btn-secondary" style={{ padding: "0.28rem 0.65rem", fontSize: "0.82rem" }}>
+              <a href="/auth/google" className="btn btn-secondary btn-google" style={{ padding: "0.28rem 0.65rem", fontSize: "0.82rem" }}>
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M21.8 12.23c0-.68-.06-1.36-.18-2.02H12v3.83h5.5a4.7 4.7 0 0 1-2.04 3.09v2.56h3.3c1.93-1.78 3.04-4.4 3.04-7.46ZM12 22c2.75 0 5.06-.91 6.75-2.47l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2H2.89v2.64A10 10 0 0 0 12 22ZM6.3 13.74A5.98 5.98 0 0 1 6 12c0-.6.1-1.19.3-1.74V7.62H2.89A10 10 0 0 0 2 12c0 1.61.39 3.14 1.09 4.38l3.21-2.64ZM12 6.06c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.99 14.74 2 12 2a10 10 0 0 0-9.11 5.62l3.41 2.64C7.1 7.85 9.35 6.06 12 6.06Z" />
+                </svg>
                 Đăng nhập Google
               </a>
             </div>

@@ -596,6 +596,19 @@ class TestPhase5Api(unittest.TestCase):
             self.assertEqual(qs_out["redirect_uri"], ["http://repoksv.tuanpq.com/auth/google/callback"])
             outside_peer.close()
 
+    def test_public_brand_assets_routes_and_mime_types(self):
+        for path, expected_ct in (
+            ("/repoksv-logo-120.png", "image/png"),
+            ("/repoksv-avatar.png", "image/png"),
+            ("/favicon.svg", "image/svg+xml"),
+            ("/logo.svg", "image/svg+xml"),
+            ("/robots.txt", "text/plain"),
+        ):
+            res = self.client.get(path)
+            if os.path.isfile(os.path.join(server.WEB_DIST_DIR, path.lstrip("/"))):
+                self.assertEqual(res.status_code, 200, path)
+                self.assertIn(expected_ct, res.headers.get("content-type", ""), path)
+
 
 if __name__ == "__main__":
     unittest.main()
