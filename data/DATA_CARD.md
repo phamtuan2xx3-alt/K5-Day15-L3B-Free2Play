@@ -36,8 +36,8 @@ Data tự dựng **không phải bằng chứng pain**.
 |---|---|
 | Dùng để làm gì | Bằng chứng pain (R1, chi tiết ở `evidence/`) · nguồn câu thử có `source = nguoi_dung: …` (đảm bảo ≥1/3 bộ câu thử) |
 | Từ đâu | Khảo sát Google Form học viên L3 (`evidence/survey/questions.md`, mở 27/11/2026 17:31) · phỏng vấn học viên ngoài nhóm và Lab Coach tại phòng C401 (`evidence/interviews/GUIDE.md`) |
-| Xử lý những bước gì | Xoá hoàn toàn cột Câu 8 (liên hệ) và dấu thời gian nhận diện trước khi commit · ghi `P1`, `P2`… kèm vai, không tên · trích tối đa 1–2 câu · lỗi người dùng kể được viết lại thành biến thể hồ sơ giả lập (không chép bài nộp thật của ai) |
-| Số dòng / số đoạn | **Đợt thử sơ bộ trước CP2:** `eval/benchmark.csv` hiện dẫn chiếu 4 phản hồi khảo sát ban đầu (`nguoi_dung: R01, R03, R05, R06` — chưa tính là đủ ngưỡng R1). Bản log đầy đủ đã ẩn danh (`evidence/survey/results.csv`, mục tiêu `≥ 20` phiếu, đã xoá cột Câu 8) và `evidence/interviews/P*.md` (`≥ 3` HV ngoài nhóm + `1–2` Lab Coach) đang thu thập và chốt commit trước CP3 |
+| Xử lý những bước gì | Xoá hoàn toàn cột liên hệ Câu 8 (học viên) & Câu C5 (Lab Coach) và dấu thời gian nhận diện trước khi commit · ghi `P1`, `P2`… kèm vai, không tên · trích tối đa 1–2 câu · lỗi người dùng kể được viết lại thành biến thể hồ sơ giả lập (không chép bài nộp thật của ai) |
+| Số dòng / số đoạn | `evidence/survey/results.csv`: **26 phiếu HV** (bỏ 1 HV chưa nộp `R14` → **`n = 25` đạt ngưỡng R1**) + `evidence/survey/results-labcoach.csv`: **2 phiếu Lab Coach** + script đếm `evidence/survey/tally.py` · `evidence/interviews/P1.md`..`P4.md` (ghi nhận trung thực trùng form / chưa theo Mom Test, không tính nguồn đạt ngưỡng riêng) · `eval/benchmark.csv` hiện dẫn chiếu **5 câu** nguồn `nguoi_dung` (`R01`, `R03`, `R05`, `R06`) |
 | Phiên bản / ngày lấy | 27–28/11/2026 |
 | Nhãn | thật |
 | Giới hạn | Mẫu chủ yếu học viên L3B cùng lớp, trẻ và rành công cụ; người trả lời khảo sát thường là người quan tâm hơn mức trung bình |

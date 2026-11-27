@@ -40,6 +40,6 @@ Khung chỉ dùng thư viện chuẩn của Python. Thêm thư viện thì ghi v
 
 ## Quy ước của nhóm
 
-- Ngôn ngữ trả lời người dùng: __
-- Phong cách code / đặt tên: __
-- Ai duyệt thay đổi do agent tạo trước khi commit: __
+- Ngôn ngữ trả lời người dùng: Tiếng Việt (có dấu rõ ràng, giữ nguyên mã tiêu chí tiếng Anh như `GIT-FORK-PR`, `PENALTY-KEY` và đường dẫn `file:dòng`)
+- Phong cách code / đặt tên: Python 3.10+ chuẩn thư viện gốc (không thêm dependency ngoài nếu không cần), hàm tool rõ docstring (`tên · input · output · tác động ra ngoài`), nhánh feature dạng `develop-<ten>`
+- Ai duyệt thay đổi do agent tạo trước khi commit: Chủ nhánh tự chạy `python run.py check` + test trước khi tạo PR; Phạm Quang Tuấn (Đội trưởng) hoặc thành viên còn lại của cặp review chéo trước khi merge vào `main`
