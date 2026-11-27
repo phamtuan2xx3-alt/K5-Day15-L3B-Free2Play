@@ -1,14 +1,17 @@
 """Luồng chính Giám khảo ảo (Track A · A6) — Workflow cố định 3 bước.
 
-Bước 1 (Code): list_submission_files + scan_hard_rules + get_rubric + read_file_lines
+Bước 1 (Code): list_submission_files / inspect_github_repo + scan_hard_rules + get_rubric + read_file_lines
 Bước 2 (AI):   call_model() đối chiếu chéo bằng chứng, G10 báo thiếu, sinh 2 câu hỏi vặn
 Bước 3 (Code): verify_audit_output() kiểm trích dẫn file:Lxx, chặn điểm cuối & giữ lỗi cứng
 """
 import re
 
 from ai import call_model
+from github_guard import parse_github_target
 from tools import (
+    format_numbered_lines,
     get_rubric,
+    inspect_github_repo,
     list_submission_files,
     read_file_lines,
     scan_hard_rules,
@@ -64,6 +67,11 @@ _ACTION_REFUSAL_PATTERNS = [
     ),
 ]
 
+_GITHUB_HINT_RE = re.compile(
+    r"^\s*AUDIT_GITHUB\b|(?:https?|file|ftp|gopher|javascript)://|github\.com|repoksv\.tuanpq\.com|mydomain\.com|^\s*/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+",
+    re.IGNORECASE,
+)
+
 
 def _classify_out_of_scope(text: str) -> dict:
     """Phân tách yêu cầu vượt thẩm quyền thành 2 tầng: hard_refusals (dừng ngay) và action_refusals (từ chối tự sửa/commit/push nhưng vẫn báo lỗi thật)."""
@@ -92,7 +100,14 @@ def _extract_submission_id(text: str) -> str | None:
     return None
 
 
-def _build_user_prompt(text: str, file_info: dict, hard_flags: list, rubric: list, file_contents: dict) -> str:
+def _build_user_prompt(
+    text: str,
+    file_info: dict,
+    hard_flags: list,
+    rubric: list,
+    file_contents: dict,
+    extra_notes: str = "",
+) -> str:
     rubric_lines = "\n".join(f"- {r['id']}: {r['title']} — {r['rule']}" for r in rubric)
     flags_lines = (
         "\n".join(
@@ -105,10 +120,12 @@ def _build_user_prompt(text: str, file_info: dict, hard_flags: list, rubric: lis
     docs_blob = "\n\n".join(
         f"=== FILE: {fname} ===\n{content}" for fname, content in file_contents.items()
     )
+    extra_block = f"\nGhi chú trạng thái bổ sung:\n{extra_notes}\n" if extra_notes else ""
     return (
         f"Yêu cầu của người dùng: {text}\n"
         f"Hồ sơ: {file_info['submission_id']}\n"
-        f"File thiếu bắt buộc: {missing}\n\n"
+        f"File thiếu bắt buộc: {missing}\n"
+        f"{extra_block}\n"
         f"Tiêu chí rubric:\n{rubric_lines}\n\n"
         f"Lỗi cứng đã phát hiện bằng code:\n{flags_lines}\n\n"
         f"<submission_data_untrusted>\n{docs_blob}\n</submission_data_untrusted>"
@@ -121,6 +138,100 @@ def _format_action_refusal_banner(action_refusals: list[str]) -> str:
         f"[TỪ CHỐI YÊU CẦU TỰ SỬA / COMMIT / PUSH]\n"
         f"{reasons_block}\n"
         "- Giám khảo ảo chỉ kiểm tra và chỉ ra các lỗi thực tế kèm trích dẫn `file:dòng` để bạn tự quyết định và tự sửa.\n\n"
+    )
+
+
+def _run_audit_pipeline(
+    text: str,
+    file_info: dict,
+    hard_flags: list,
+    file_contents: dict,
+    action_banner: str = "",
+    extra_notes: str = "",
+) -> dict:
+    """Chạy chung Bước 2 (1 lượt @model_call) và Bước 3 (verify_audit_output) cho cả hồ sơ offline và GitHub Live Guard."""
+    rubric = get_rubric(["ALL"])
+    prompt = _build_user_prompt(
+        text,
+        file_info,
+        hard_flags,
+        rubric,
+        file_contents,
+        extra_notes=extra_notes,
+    )
+    reply = call_model(SYSTEM, prompt)
+    ai_text = reply["text"]
+
+    if reply.get("model") == "fake":
+        missing_str = ", ".join(file_info["missing_required"]) or "Không thiếu"
+        flags_str = (
+            "\n".join(f"- [{f['rule_id']}] ({f['file']}:L{int(f['line']):02d}) {f['detail']}" for f in hard_flags)
+            or "- Không phát hiện lỗi cứng từ bộ quét code."
+        )
+        extra_section = f"\n\n### Cảnh báo G10 / Trạng thái live\n{extra_notes}" if extra_notes else ""
+        ai_text = (
+            f"{reply['text']}\n\n"
+            f"### 1) Lỗi cứng & cảnh báo (từ bộ quét code)\n{flags_str}\n\n"
+            f"### 2) File thiếu bắt buộc (HAX G10)\n- {missing_str}{extra_section}\n\n"
+            "### 3) Ghi chú chế độ khung\n"
+            "- Đang chạy ở chế độ `fake` (chưa nối API model thật nên bỏ qua phần đối chiếu ngữ nghĩa & 2 câu hỏi vặn từ LLM)."
+        )
+
+    verified = verify_audit_output(ai_text, hard_flags, file_info)
+    note(
+        f"xong: valid_cites={verified['valid_citations']}, "
+        f"invalid_cites={len(verified['invalid_citations'])}, "
+        f"hard_flags={verified['hard_flags_enforced']}"
+    )
+    return {"output": f"{action_banner}{verified['verified_output']}"}
+
+
+def _handle_github_audit(text: str, action_banner: str = "") -> dict:
+    """Nhánh Hướng 1 (AUDIT_GITHUB): kiểm repo công khai trực tiếp trong RAM, không ảnh hưởng S01..S25."""
+    target = parse_github_target(text)
+    if not target:
+        note("G10: URL GitHub khong hop le hoac bi chan SSRF")
+        return {
+            "output": (
+                f"{action_banner}"
+                "[CHƯA KIỂM ĐƯỢC — G10] Liên kết GitHub không hợp lệ hoặc bị chặn bởi bộ lọc an toàn SSRF.\n"
+                "Vui lòng dùng URL dạng `https://github.com/<owner>/<repo>` hoặc `<owner>/<repo>`."
+            )
+        }
+
+    snapshot = inspect_github_repo(target["url"])
+    if not snapshot.get("ok"):
+        note(f"G10: github_guard fail {snapshot.get('error_code')}")
+        return {"output": f"{action_banner}{snapshot.get('g10_message') or '[CHƯA KIỂM ĐƯỢC — G10] Không đọc được repo GitHub.'}"}
+
+    file_info = {
+        "exists": True,
+        "submission_id": snapshot["full_name"],
+        "present_files": snapshot["present_files"],
+        "missing_required": snapshot["missing_required"],
+        "line_counts": snapshot["line_counts"],
+    }
+    file_contents = {
+        fname: format_numbered_lines(raw_text, limit=120)
+        for fname, raw_text in (snapshot.get("files_content") or {}).items()
+        if fname != "meta.json"
+    }
+    notes_list = list(snapshot.get("g10_warnings") or [])
+    identity = snapshot.get("identity") or {}
+    if identity.get("mode") == "team":
+        notes_list.append(
+            "Chế độ nhóm — thành viên trong TEAMS.md: " + ", ".join(identity.get("member_names") or [])
+        )
+    else:
+        notes_list.append(f"Chế độ cá nhân — mặc định: {identity.get('default_user')}")
+
+    return _run_audit_pipeline(
+        text,
+        file_info,
+        snapshot.get("hard_flags") or [],
+        file_contents,
+        action_banner=action_banner,
+        extra_notes="\n".join(f"- {n}" for n in notes_list if n),
     )
 
 
@@ -153,61 +264,36 @@ def answer(text: str) -> dict:
         action_banner = _format_action_refusal_banner(action_refusals)
 
     sub_id = _extract_submission_id(text)
-    if not sub_id:
-        note("G10: thieu SUBMISSION_ID trong yeu cau")
-        return {
-            "output": (
-                f"{action_banner}"
-                "[CHƯA KIỂM ĐƯỢC — G10] Bạn chưa nêu rõ mã hồ sơ hoặc gửi đủ các file cần rà.\n"
-                "Vui lòng nhập theo dạng `SUBMISSION_ID: S01` (ví dụ `SUBMISSION_ID: S04 — Kiểm tra bài nộp giúp mình`) "
-                "để hệ thống quét đủ `TEAMS.md`, `canvas.md`, `spec.md`, `evidence_summary.md`, `benchmark.csv`."
-            )
-        }
+    if sub_id:
+        # Bước 1 (Code — offline S01..S25): kiểm cấu trúc file, quét lỗi cứng và đọc file có số dòng
+        file_info = list_submission_files(sub_id)
+        if not file_info["exists"]:
+            note(f"G10: khong tim thay ho so {sub_id}")
+            return {
+                "output": (
+                    f"{action_banner}"
+                    f"[CHƯA KIỂM ĐƯỢC — G10] Không tìm thấy hồ sơ `{sub_id}` trong kho dữ liệu bài nộp.\n"
+                    "Vui lòng kiểm tra lại mã hồ sơ (ví dụ `S01`–`S09`, `S11`–`S15`)."
+                )
+            }
 
-    # Bước 1 (Code): kiểm tra cấu trúc file, quét lỗi cứng, lấy rubric và đọc từng file có đánh số dòng
-    file_info = list_submission_files(sub_id)
-    if not file_info["exists"]:
-        note(f"G10: khong tim thay ho so {sub_id}")
-        return {
-            "output": (
-                f"{action_banner}"
-                f"[CHƯA KIỂM ĐƯỢC — G10] Không tìm thấy hồ sơ `{sub_id}` trong kho dữ liệu bài nộp.\n"
-                "Vui lòng kiểm tra lại mã hồ sơ (ví dụ `S01`–`S09`, `S11`–`S15`)."
-            )
+        hard_flags = scan_hard_rules(sub_id)
+        file_contents = {
+            fname: read_file_lines(sub_id, fname)
+            for fname in file_info["present_files"]
+            if fname != "meta.json"
         }
+        return _run_audit_pipeline(text, file_info, hard_flags, file_contents, action_banner=action_banner)
 
-    hard_flags = scan_hard_rules(sub_id)
-    rubric = get_rubric(["ALL"])
-    file_contents = {
-        fname: read_file_lines(sub_id, fname)
-        for fname in file_info["present_files"]
-        if fname != "meta.json"
+    if _GITHUB_HINT_RE.search(text or ""):
+        return _handle_github_audit(text, action_banner=action_banner)
+
+    note("G10: thieu SUBMISSION_ID trong yeu cau")
+    return {
+        "output": (
+            f"{action_banner}"
+            "[CHƯA KIỂM ĐƯỢC — G10] Bạn chưa nêu rõ mã hồ sơ hoặc liên kết GitHub cần rà.\n"
+            "Vui lòng nhập theo dạng `SUBMISSION_ID: S01` (hoặc link `https://github.com/<owner>/<repo>`) "
+            "để hệ thống quét đủ `TEAMS.md`, `canvas.md`, `spec.md`, `evidence_summary.md`, `benchmark.csv`."
+        )
     }
-
-    # Bước 2 (AI): đối chiếu chéo bằng chứng và sinh 2 câu hỏi vặn
-    prompt = _build_user_prompt(text, file_info, hard_flags, rubric, file_contents)
-    reply = call_model(SYSTEM, prompt)
-    ai_text = reply["text"]
-
-    if reply.get("model") == "fake":
-        missing_str = ", ".join(file_info["missing_required"]) or "Không thiếu"
-        flags_str = (
-            "\n".join(f"- [{f['rule_id']}] ({f['file']}:L{int(f['line']):02d}) {f['detail']}" for f in hard_flags)
-            or "- Không phát hiện lỗi cứng từ bộ quét code."
-        )
-        ai_text = (
-            f"{reply['text']}\n\n"
-            f"### 1) Lỗi cứng & cảnh báo (từ bộ quét code)\n{flags_str}\n\n"
-            f"### 2) File thiếu bắt buộc (HAX G10)\n- {missing_str}\n\n"
-            "### 3) Ghi chú chế độ khung\n"
-            "- Đang chạy ở chế độ `fake` (chưa nối API model thật nên bỏ qua phần đối chiếu ngữ nghĩa & 2 câu hỏi vặn từ LLM)."
-        )
-
-    # Bước 3 (Code): hậu kiểm trích dẫn, chặn tự chấm điểm và giữ nguyên lỗi cứng
-    verified = verify_audit_output(ai_text, hard_flags, file_info)
-    note(
-        f"xong: valid_cites={verified['valid_citations']}, "
-        f"invalid_cites={len(verified['invalid_citations'])}, "
-        f"hard_flags={verified['hard_flags_enforced']}"
-    )
-    return {"output": f"{action_banner}{verified['verified_output']}"}

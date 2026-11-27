@@ -2,8 +2,8 @@
 
 Giữ nguyên 5 công cụ theo hợp đồng trong spec.md §4 và docs/cp2-plan.md:
     list_submission_files · scan_hard_rules · get_rubric · read_file_lines · verify_audit_output
-Bổ sung công cụ nhận diện Team/Cá nhân cho Hướng 2:
-    extract_project_identity
+Bổ sung công cụ nhận diện Team/Cá nhân và GitHub Live Guard:
+    extract_project_identity · inspect_github_repo
 """
 import csv
 import io
@@ -783,3 +783,12 @@ def verify_audit_output(report: str, hard_flags: list, files: dict) -> dict:
         "auto_grade_blocked": auto_grade_blocked,
         "hard_flags_enforced": len(hard_flags or []),
     }
+
+
+@tool
+def inspect_github_repo(target_or_url: str, force_refresh: bool = False) -> dict:
+    """Soi trực tiếp trạng thái repo GitHub công khai trong RAM (Public, GIT-FORK-PR, Anti-Tamper CP2, lộ key/file nhạy cảm và danh tính Team/Cá nhân).
+    Input: target_or_url (str), force_refresh (bool). Output: dict snapshot GitHub Guard. Không tác động ra ngoài."""
+    from github_guard import fetch_github_repo_snapshot
+
+    return fetch_github_repo_snapshot(target_or_url, force_refresh=force_refresh)
