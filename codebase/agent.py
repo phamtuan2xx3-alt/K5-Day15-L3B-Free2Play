@@ -31,18 +31,24 @@ NGUYÊN TẮC BẮT BUỘC:
    (4) 2 câu hỏi vặn phản biện nhắm đúng chỗ yếu nhất của bài (hoặc chỗ cần làm rõ nhất nếu bài sạch)."""
 
 
-def _is_out_of_scope_request(text: str) -> str | None:
-    """Phát hiện yêu cầu vượt thẩm quyền hoặc vi phạm quy chế AI20K."""
+def _is_out_of_scope_request(text: str) -> list[str]:
+    """Phát hiện toàn bộ yêu cầu vượt thẩm quyền hoặc vi phạm quy chế AI20K."""
     low = (text or "").lower()
     patterns = [
-        (r"b[iị]a.{0,20}ph[oỏ]ng v[aấ]n|vi[eế]t b[iị]a|t[aạ]o gi[aả].{0,20}b[aằ]ng ch[uứ]ng", "NO-AUTO-GRADE: Từ chối bịa đặt phiếu phỏng vấn hoặc dữ liệu bằng chứng."),
-        (r"s[uử]a.{0,20}chu[aẩ]n [đd][aạ]t|h[aạ].{0,20}ng[uư][oỡ]ng|xo[aá].{0,20}c[aâ]u th[uử] tr[uư][oợ]t", "PENALTY-STANDARD: Từ chối sửa chuẩn đạt hoặc xoá câu thử trượt sau mốc CP2."),
-        (r"ch[aấ]m.{0,20}[đd]i[eể]m cu[oố]i|ch[aấ]m.{0,20}bao nhi[eê]u [đd]i[eể]m|cho [đd]i[eể]m.{0,10}100", "NO-AUTO-GRADE: Từ chối tự chấm điểm cuối cùng (/100)."),
+        (
+            r"ch[aấ]m.{0,40}(?:[đd]i[eể]m|bao\s+nhi[eê]u|m[aấ]y)|[đd][uư][oợ]c\s+m[aấ]y\s+[đd]i[eể]m|bao\s+nhi[eê]u.{0,15}100|cho\s+[đd]i[eể]m.{0,15}100",
+            "NO-AUTO-GRADE: Từ chối tự chấm điểm cuối cùng (/100).",
+        ),
+        (
+            r"(?:b[iị]a|vi[eế]t\s+b[iị]a|vi[eế]t\s+h[oộ]|t[aạ]o\s+gi[uú]p|t[aạ]o\s+gi[aả]).{0,40}(?:ph[oỏ]ng\s+v[aấ]n|kh[aả]o\s+s[aá]t|b[aằ]ng\s+ch[uứ]ng|s[oố]\s+li[eệ]u)",
+            "NO-AUTO-GRADE: Từ chối bịa đặt phiếu phỏng vấn hoặc dữ liệu bằng chứng.",
+        ),
+        (
+            r"(?:s[uử]a|[đd][oổ]i|h[aạ]).{0,25}(?:chu[aẩ]n\s+[đd][aạ]t|ng[uư][oỡ]ng)|xo[aá].{0,25}c[aâ]u\s+th[uử]\s+tr[uư][oợ]t|t[uự]\s+s[uử]a\s+file",
+            "PENALTY-STANDARD: Từ chối sửa chuẩn đạt, xoá câu thử trượt sau mốc CP2 hoặc tự ý sửa file bài nộp.",
+        ),
     ]
-    for pat, msg in patterns:
-        if re.search(pat, low):
-            return msg
-    return None
+    return [msg for pat, msg in patterns if re.search(pat, low)]
 
 
 def _extract_submission_id(text: str) -> str | None:
@@ -80,13 +86,20 @@ def _build_user_prompt(text: str, file_info: dict, hard_flags: list, rubric: lis
 
 def answer(text: str) -> dict:
     """Thực thi workflow cố định 3 bước cho một yêu cầu soát bài nộp."""
-    refusal = _is_out_of_scope_request(text)
-    if refusal:
+    refusals = _is_out_of_scope_request(text)
+    if refusals:
         note("tu_choi: yeu cau vuot tham quyen / vi pham quy che")
+        reasons_block = "\n".join(f"- {r}" for r in refusals)
+        extra_guide = ""
+        if any("phỏng vấn" in r for r in refusals):
+            extra_guide = (
+                "\n- **Hướng đi đúng quy chế:** Tự phỏng vấn >=3 người dùng thật ngoài nhóm theo kịch bản "
+                "`evidence/interviews/GUIDE.md` và ghi mỗi người một file `P1.md`..`P3.md`."
+            )
         return {
             "output": (
-                f"[TỪ CHỐI YÊU CẦU] {refusal}\n"
-                "Giám khảo ảo chỉ hỗ trợ rà soát tiêu chí, chỉ ra chỗ thiếu/mâu thuẫn kèm trích dẫn `file:dòng` "
+                f"[TỪ CHỐI YÊU CẦU]\n{reasons_block}{extra_guide}\n"
+                "- Giám khảo ảo chỉ hỗ trợ rà soát tiêu chí, chỉ ra chỗ thiếu/mâu thuẫn kèm trích dẫn `file:dòng` "
                 "và đặt 2 câu hỏi vặn phản biện để bạn tự chỉnh sửa bài."
             )
         }

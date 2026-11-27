@@ -42,6 +42,15 @@ def _read_lines(path: str) -> list[str]:
         return f.read().splitlines()
 
 
+def _find_key_line(path: str, key: str) -> int:
+    """Tìm số dòng (1-based) chứa khoá JSON hoặc YAML đầu tiên."""
+    target = f'"{key}"'
+    for idx, ln in enumerate(_read_lines(path), 1):
+        if target in ln:
+            return idx
+    return 1
+
+
 @tool
 def list_submission_files(submission_id: str) -> dict:
     """Liệt kê các file hiện có và file bắt buộc bị thiếu trong hồ sơ bài nộp.
@@ -296,9 +305,38 @@ def _scan_secrets_and_injection(folder: str, files: list[str]) -> list[dict]:
     return findings
 
 
+def _scan_metric_spec(path: str) -> list[dict]:
+    findings = []
+    lines = _read_lines(path)
+    valid_metrics = 0
+    for idx, ln in enumerate(lines, 1):
+        m = re.match(r"^\s*-\s*name\s*:\s*(.+)$", ln)
+        if m:
+            val = m.group(1).strip().strip('"').strip("'")
+            if val and not val.startswith("<") and "<…" not in val:
+                valid_metrics += 1
+            else:
+                findings.append({
+                    "rule_id": "R4-BENCHMARK",
+                    "severity": "cao",
+                    "file": "metric_spec.yaml",
+                    "line": idx,
+                    "detail": f"Metric dòng L{idx:02d} còn chỗ trống hoặc mẫu '<…>'.",
+                })
+    if valid_metrics < 3:
+        findings.append({
+            "rule_id": "R4-BENCHMARK",
+            "severity": "cao",
+            "file": "metric_spec.yaml",
+            "line": 1,
+            "detail": f"metric_spec.yaml mới có {valid_metrics} metric hợp lệ (cần >=3).",
+        })
+    return findings
+
+
 @tool
 def scan_hard_rules(submission_id: str) -> list:
-    """Quét tự động bằng code các lỗi cứng (lộ key/PII, TEAMS, Canvas pain có AI, PR nhầm repo gốc, sửa chuẩn đạt, benchmark, prompt injection).
+    """Quét tự động bằng code các lỗi cứng (lộ key/PII, TEAMS, Canvas pain có AI, PR nhầm repo gốc, sửa chuẩn đạt, benchmark/metric_spec, prompt injection).
     Input: submission_id (str). Output: list[dict] các lỗi tìm được {rule_id, severity, file, line, detail}. Không tác động ra ngoài."""
     info = list_submission_files(submission_id)
     if not info["exists"]:
@@ -309,16 +347,17 @@ def scan_hard_rules(submission_id: str) -> list:
 
     expected_bench_count = None
     if "meta.json" in present:
+        meta_path = os.path.join(folder, "meta.json")
         try:
-            with open(os.path.join(folder, "meta.json"), encoding="utf-8-sig") as f:
+            with open(meta_path, encoding="utf-8-sig") as f:
                 meta = json.load(f)
             if meta.get("pr_target") == "upstream" or "starter" in str(meta.get("git_remote", "")).lower():
                 findings.append({
                     "rule_id": "GIT-FORK-PR",
                     "severity": "rat_cao",
                     "file": "meta.json",
-                    "line": 2,
-                    "detail": "Đích PR/push đang trỏ về repo gốc của khoá (upstream) thay vì repo fork của nhóm.",
+                    "line": _find_key_line(meta_path, "pr_target"),
+                    "detail": "Đích PR/push đang trỏ về repo gốc của khoá (upstream) thay vì repo fork của nhóm — cảnh báo nguy cơ lộ bài, cần huỷ PR trên repo gốc và đổi remote về repo fork của nhóm.",
                 })
             base_thr = str(meta.get("cp2_baseline_threshold", "")).strip()
             cur_thr = str(meta.get("current_threshold", "")).strip()
@@ -327,7 +366,7 @@ def scan_hard_rules(submission_id: str) -> list:
                     "rule_id": "PENALTY-STANDARD",
                     "severity": "rat_cao",
                     "file": "meta.json",
-                    "line": 4,
+                    "line": _find_key_line(meta_path, "current_threshold"),
                     "detail": f"Chuẩn đạt đã bị đổi từ {base_thr} (CP2) thành {cur_thr} — vi phạm luật chốt CP2 (0 điểm R4).",
                 })
             if isinstance(meta.get("cp2_benchmark_count"), int):
@@ -347,6 +386,8 @@ def scan_hard_rules(submission_id: str) -> list:
         findings.extend(_scan_canvas(os.path.join(folder, "canvas.md")))
     if "benchmark.csv" in present:
         findings.extend(_scan_benchmark(os.path.join(folder, "benchmark.csv"), expected_bench_count))
+    if "metric_spec.yaml" in present:
+        findings.extend(_scan_metric_spec(os.path.join(folder, "metric_spec.yaml")))
     findings.extend(_scan_secrets_and_injection(folder, present))
     return findings
 
@@ -418,8 +459,11 @@ def verify_audit_output(report: str, hard_flags: list, files: dict) -> dict:
     enforced_lines = []
     for flag in hard_flags or []:
         rid = flag.get("rule_id", "")
-        cite = f"{flag.get('file', '')}:L{int(flag.get('line', 1)):02d}"
-        if rid not in out_text or cite not in out_text:
+        fname = flag.get("file", "")
+        ln_no = int(flag.get("line", 1))
+        cite = f"{fname}:L{ln_no:02d}"
+        has_cite = bool(fname and re.search(r"\b" + re.escape(fname) + r":L0*" + str(ln_no) + r"\b", out_text))
+        if rid not in out_text or not has_cite:
             enforced_lines.append(f"- [{rid}] ({cite}) {flag.get('detail', '')}")
     if enforced_lines:
         out_text += "\n\n### Cảnh báo lỗi cứng bắt buộc (từ bộ quét code)\n" + "\n".join(enforced_lines)
