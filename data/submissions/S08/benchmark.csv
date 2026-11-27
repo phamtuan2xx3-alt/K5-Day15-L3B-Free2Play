@@ -1,0 +1,25 @@
+id,input,expected,pass_criterion,type,source
+Q01,Câu thử tổng hợp 01 (seed 50),Đáp án chuẩn 01,Đủ căn cứ trích dẫn và đúng quy tắc,tu_choi,tu_viet
+Q02,Câu thử tổng hợp 02 (seed 50),Đáp án chuẩn 02,Đủ căn cứ trích dẫn và đúng quy tắc,tu_choi,tu_viet
+Q03,Câu thử tổng hợp 03 (seed 50),Đáp án chuẩn 03,Đủ căn cứ trích dẫn và đúng quy tắc,tu_choi,tu_viet
+Q04,Câu thử tổng hợp 04 (seed 50),Đáp án chuẩn 04,Đủ căn cứ trích dẫn và đúng quy tắc,kho,data_that: chat.csv
+Q05,Câu thử tổng hợp 05 (seed 50),Đáp án chuẩn 05,Đủ căn cứ trích dẫn và đúng quy tắc,kho,data_that: chat.csv
+Q06,Câu thử tổng hợp 06 (seed 50),Đáp án chuẩn 06,Đủ căn cứ trích dẫn và đúng quy tắc,kho,data_that: chat.csv
+Q07,Câu thử tổng hợp 07 (seed 50),Đáp án chuẩn 07,Đủ căn cứ trích dẫn và đúng quy tắc,kho,sinh_seed: 42
+Q08,Câu thử tổng hợp 08 (seed 50),Đáp án chuẩn 08,Đủ căn cứ trích dẫn và đúng quy tắc,kho,nguoi_dung: P1
+Q09,Câu thử tổng hợp 09 (seed 50),Đáp án chuẩn 09,Đủ căn cứ trích dẫn và đúng quy tắc,kho,sinh_seed: 42
+Q10,Câu thử tổng hợp 10 (seed 50),Đáp án chuẩn 10,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q11,Câu thử tổng hợp 11 (seed 50),Đáp án chuẩn 11,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q12,Câu thử tổng hợp 12 (seed 50),Đáp án chuẩn 12,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q13,Câu thử tổng hợp 13 (seed 50),Đáp án chuẩn 13,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q14,Câu thử tổng hợp 14 (seed 50),Đáp án chuẩn 14,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q15,Câu thử tổng hợp 15 (seed 50),Đáp án chuẩn 15,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q16,Câu thử tổng hợp 16 (seed 50),Đáp án chuẩn 16,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q17,Câu thử tổng hợp 17 (seed 50),Đáp án chuẩn 17,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q18,Câu thử tổng hợp 18 (seed 50),Đáp án chuẩn 18,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q19,Câu thử tổng hợp 19 (seed 50),Đáp án chuẩn 19,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q20,Câu thử tổng hợp 20 (seed 50),Đáp án chuẩn 20,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q21,Câu thử tổng hợp 21 (seed 50),Đáp án chuẩn 21,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q22,Câu thử tổng hợp 22 (seed 50),Đáp án chuẩn 22,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát
+Q23,Câu thử tổng hợp 23 (seed 50),Đáp án chuẩn 23,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,sinh_seed: 42
+Q24,Câu thử tổng hợp 24 (seed 50),Đáp án chuẩn 24,Đủ căn cứ trích dẫn và đúng quy tắc,thuong,nguoi_dung: khảo sát

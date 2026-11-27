@@ -1,0 +1,4 @@
+# Đoạn cấu hình lỡ chép nhầm lên repo
+MODEL_PROVIDER=openai
+API_KEY=sk-test-dummy-9876543210-not-real
+# Liên hệ P1: 0912345678
