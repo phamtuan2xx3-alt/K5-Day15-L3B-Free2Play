@@ -6,7 +6,7 @@
 
 - Tên nhóm: Free2Play
 - Lớp: L3B
-- Track: ____
+- Track: D
 - Link repo: https://github.com/phamtuan2xx3-alt/K5-Day15-L3B-Free2Play
 
 | STT | Họ và tên | Mã học viên | Vai trò | Phần việc chính |
@@ -14,6 +14,7 @@
 | 1 | ____ | ____ | Đội trưởng | ____ |
 | 2 | ____ | ____ | Thành viên | ____ |
 | 3 | ____ | ____ | Thành viên | ____ |
+| 4 | ____ | ____ | Thành viên | ____ |
 
 **Quy tắc điền**
 - **Lớp:** `L3A` hoặc `L3B`. **Track:** một chữ `A` (EdTech), `B` (Y tế), `C` (Du lịch), `D` (Thương mại điện tử), `E` (Tài chính) hoặc `F` (Làn khác). **Link repo:** link GitHub công khai của nhóm.
