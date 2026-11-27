@@ -105,10 +105,20 @@ class TestPhase2ParseAndSSRF(unittest.TestCase):
             github_guard.parse_github_target("owner/repo")["full_name"],
             "owner/repo",
         )
+        # Chuẩn hoá 1 dấu / do trình duyệt/proxy gộp: https:/github.com/...
+        self.assertEqual(
+            github_guard.parse_github_target("https:/github.com/owner/repo")["url"],
+            "https://github.com/owner/repo",
+        )
+        self.assertEqual(
+            github_guard.parse_github_target("/https:/github.com/owner/repo")["full_name"],
+            "owner/repo",
+        )
 
         # Chặn SSRF, scheme khác https, domain giả mạo, path traversal, internal routes
         blocked = [
             "http://169.254.169.254/latest/meta-data",
+            "http:/169.254.169.254/latest/meta-data",
             "https://169.254.169.254/latest/meta-data",
             "http://127.0.0.1/owner/repo",
             "https://127.0.0.1/owner/repo",
@@ -138,6 +148,42 @@ class TestPhase2ParseAndSSRF(unittest.TestCase):
             handler.redirect_request(req, None, 302, "Found", {}, "http://169.254.169.254/latest/meta-data")
         with self.assertRaises(github_guard.SSRFBlockedError):
             handler.redirect_request(req, None, 302, "Found", {}, "https://evil.example/payload")
+
+    def test_http_get_bytes_bounded_stream_prevents_oom(self):
+        class _ChunkedStream:
+            def __init__(self, total_bytes: int):
+                self.status = 200
+                self.headers = {}
+                self._remaining = total_bytes
+
+            def read(self, amt: int = -1):
+                if self._remaining <= 0:
+                    return b""
+                n = self._remaining if amt < 0 else min(amt, self._remaining)
+                self._remaining -= n
+                return b"x" * n
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class _FakeOpener:
+            def open(self, req, timeout=12):
+                return _ChunkedStream(500_000)
+
+        with (
+            patch("socket.getaddrinfo", side_effect=_public_dns_addrinfo),
+            patch("urllib.request.build_opener", return_value=_FakeOpener()),
+        ):
+            status, _, body = github_guard._http_get_bytes(
+                "https://raw.githubusercontent.com/a/b/main/big.md",
+                {},
+                max_bytes=1024,
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(body), 1024)
 
 
 class TestPhase2Snapshot4Layers(unittest.TestCase):

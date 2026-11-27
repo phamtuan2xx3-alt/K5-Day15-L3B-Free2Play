@@ -149,10 +149,15 @@ def parse_github_target(text: str) -> dict[str, str] | None:
     if not raw or ".." in raw or "\\" in raw:
         return None
 
-    # Chặn dứt khoát mọi scheme khác https (http://, file://, ftp://, ...)
+    # Chặn dứt khoát mọi scheme khác https (kể cả dạng 1 dấu / như http:/...)
+    if re.search(r"(?i)(?:^|[\s|/])(?:http|file|ftp|gopher|javascript|data):/{1,2}", raw):
+        return None
     scheme_matches = re.findall(r"([A-Za-z][A-Za-z0-9+.-]*)://", raw)
     if any(s.lower() != "https" for s in scheme_matches):
         return None
+
+    # Chuẩn hoá https:/github.com/... (1 dấu / do trình duyệt/proxy gộp) thành https://github.com/...
+    raw = re.sub(r"(?i)(^|[\s|/])https:/([^/])", r"\1https://\2", raw)
 
     # 1. Tìm URL https://github.com/owner/repo trong chuỗi (bao gồm /https://github.com/...)
     m_gh_https = re.search(
@@ -292,10 +297,30 @@ class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, abs_url)
 
 
+def _read_bounded(stream: Any, max_bytes: int) -> bytes:
+    """Đọc response theo chunk tới tối đa max_bytes để chống OOM DoS."""
+    limit = max(1, int(max_bytes))
+    chunks: list[bytes] = []
+    total = 0
+    while total < limit:
+        to_read = min(65536, limit - total)
+        try:
+            chunk = stream.read(to_read)
+        except TypeError:
+            raw = stream.read()
+            return raw[:limit]
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
 def _http_get_bytes(
     url: str,
     headers: dict[str, str],
     timeout: int = DEFAULT_TIMEOUT_S,
+    max_bytes: int = 2_500_000,
 ) -> tuple[int, dict[str, str], bytes]:
     _assert_safe_url(url)
     req_headers = {"User-Agent": USER_AGENT}
@@ -306,10 +331,10 @@ def _http_get_bytes(
         with opener.open(req, timeout=timeout) as resp:
             status = getattr(resp, "status", 200) or 200
             resp_headers = {k.lower(): v for k, v in resp.headers.items()}
-            return int(status), resp_headers, resp.read()
+            return int(status), resp_headers, _read_bounded(resp, max_bytes)
     except urllib.error.HTTPError as e:
         resp_headers = {k.lower(): v for k, v in (e.headers.items() if e.headers else [])}
-        body = e.read() if hasattr(e, "read") else b""
+        body = _read_bounded(e, max_bytes) if hasattr(e, "read") else b""
         return int(e.code), resp_headers, body
 
 
@@ -398,7 +423,7 @@ def _fetch_raw_files(
     for rel_path in paths:
         quoted_path = urllib.parse.quote(rel_path, safe="/")
         raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{quoted_branch}/{quoted_path}"
-        status, _, body = _http_get_bytes(raw_url, _raw_headers(), timeout=timeout)
+        status, _, body = _http_get_bytes(raw_url, _raw_headers(), timeout=timeout, max_bytes=max_file_bytes + 1)
         if status != 200:
             continue
         if len(body) > max_file_bytes:

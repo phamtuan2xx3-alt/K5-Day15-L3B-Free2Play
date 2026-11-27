@@ -547,6 +547,11 @@ def _heuristic_fake_defense(
     }
 
 
+def _escape_xml_sandbox(text: str) -> str:
+    """Escape thẻ đóng/mở bên trong dữ liệu người học để không thể thoát khỏi sandbox <user_answer>."""
+    return (text or "").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def viva_defense(
     files_content: dict[str, str],
     *,
@@ -568,16 +573,67 @@ def viva_defense(
     cite = str((viva_meta or {}).get("source_cite") or (f"{anchors[0][0]}:L{anchors[0][1]:02d}" if anchors else "spec.md:L01"))
     injection_in_answer = _detect_answer_injection(user_answer)
 
+    if injection_in_answer:
+        note("viva_defense: chan prompt injection trong ANSWER -> Level 0/6 (0 model call)")
+        diag = _heuristic_fake_defense(files_content, anchors, question, user_answer)
+        draft = {
+            "concept_key": str((viva_meta or {}).get("concept_key") or "viva-defense-check"),
+            "term": str((viva_meta or {}).get("term") or question[:60] or "Phản biện bài nộp"),
+            "tag": str((viva_meta or {}).get("tag") or "khai_niem"),
+            "source_cite": cite,
+            "bloom_level": 0,
+            "proposed_bloom_level": 0,
+            "status": "nghi chưa hiểu",
+            "understood_points": [],
+            "missing_points": diag["missing_points"],
+            "misconceptions": [diag["misconception"]],
+            "misconception": diag["misconception"],
+            "resolved_misconceptions": [],
+            "next_probe": diag["next_question"],
+            "next_question": diag["next_question"],
+            "reference": str((viva_meta or {}).get("reference") or ""),
+            "rubric": str((viva_meta or {}).get("rubric") or ""),
+        }
+        raw_out = (
+            f"### 1) Mức đạt Bloom\n"
+            f"- `Level 0/6 — {_BLOOM_TITLES[0]}` | Trạng thái: **nghi chưa hiểu**\n\n"
+            f"### 2) Điểm đã trúng / Còn thiếu\n"
+            f"- Đã trúng: Chưa có ý khớp căn cứ.\n"
+            f"- Còn thiếu: {'; '.join(diag['missing_points'])}\n\n"
+            f"### 3) Ngộ nhận / Lệch số liệu + Bản chất\n"
+            f"- {diag['misconception']}\n"
+            f"- Bản chất: {diag['explanation']}\n\n"
+            f"### 4) Câu hỏi nâng bậc (+1 Bloom) & Bản nháp chờ lưu\n"
+            f"- {diag['next_question']}\n\n"
+            f"[BLOOM_LOG_DRAFT_JSON]\n{json.dumps(draft, ensure_ascii=False)}\n[/BLOOM_LOG_DRAFT_JSON]"
+        )
+        verified = verify_audit_output(raw_out, [], {"line_counts": counts})
+        return {
+            "ok": True,
+            "mode": "defense",
+            "member_name": resolved_member,
+            "identity": identity,
+            "level": 0,
+            "proposed_bloom_level": 0,
+            "status": "nghi chưa hiểu",
+            "misconception": draft["misconception"],
+            "next_question": draft["next_question"],
+            "injection_detected": True,
+            "draft_profile_update": draft,
+            "output": verified["verified_output"],
+        }
+
+    safe_user_answer = _escape_xml_sandbox(user_answer)
     prompt = (
         f"Chế độ: VIVA_DEFENSE\n"
         f"Thành viên: {resolved_member} (mode={identity['mode']})\n"
         f"Câu hỏi đã đặt: {question or '(Phản biện tổng quát)'}\n"
-        f"<user_answer>\n{user_answer}\n</user_answer>\n\n"
+        f"<user_answer>\n{safe_user_answer}\n</user_answer>\n\n"
         f"{_build_viva_context_blob(files_content)}"
     )
     reply = call_model(SYSTEM_VIVA_DEFENSE, prompt)
 
-    if reply.get("model") == "fake" or injection_in_answer:
+    if reply.get("model") == "fake":
         diag = _heuristic_fake_defense(files_content, anchors, question, user_answer)
         level = 0 if injection_in_answer else diag["level"]
         status = "nghi chưa hiểu" if injection_in_answer else diag["status"]
@@ -798,15 +854,20 @@ def _parse_viva_request(text: str) -> dict | None:
     )
     key_pattern = re.compile(r"^(" + "|".join(known_keys) + r")\s*:\s*(.*)$", re.IGNORECASE | re.DOTALL)
 
+    current_key: str | None = None
     for seg in [p.strip() for p in rest.split("|") if p.strip()]:
         km = key_pattern.match(seg)
         if km:
             k = km.group(1).upper()
             v = km.group(2).strip()
+            current_key = k
             fields[k] = v
             if k == "SUBMISSION_ID":
                 free_parts.append(f"SUBMISSION_ID: {v}")
+        elif current_key in ("ANSWER", "QUESTION", "GOAL", "MEMORY", "BLOOM_MEMORY", "BLOOM_SUMMARY"):
+            fields[current_key] = f"{fields[current_key]} | {seg}".strip()
         else:
+            current_key = None
             free_parts.append(seg)
 
     source_hint = fields.get("URL") or fields.get("REPO") or fields.get("SOURCE") or " | ".join(free_parts)
