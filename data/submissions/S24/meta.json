@@ -1,0 +1,7 @@
+{
+  "pr_target": "upstream",
+  "git_remote": "https://github.com/btc-khoa/K5-Day15-Starter.example.invalid",
+  "cp2_baseline_threshold": "80%",
+  "current_threshold": "80%",
+  "cp2_benchmark_count": 24
+}

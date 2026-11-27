@@ -1,0 +1,7 @@
+{
+  "pr_target": "fork",
+  "git_remote": "https://github.com/mau-nhom/K5-Day15-L3B-NhomMau01.example.invalid",
+  "cp2_baseline_threshold": "80%",
+  "current_threshold": "80%",
+  "cp2_benchmark_count": 24
+}
