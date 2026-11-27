@@ -189,9 +189,12 @@ def _session_cookie_name(request: Request) -> str:
 
 
 def _client_ip(request: Request) -> str:
-    """Xác định IP client an toàn: chỉ tin X-Real-IP / hop cuối XFF khi đi qua proxy tin cậy."""
+    """Xác định IP client an toàn: chỉ tin CF-Connecting-IP / X-Real-IP / XFF khi đi qua proxy tin cậy."""
     peer = request.client.host if request.client else "127.0.0.1"
     if _is_trusted_proxy_peer(request):
+        cf_ip = (request.headers.get("cf-connecting-ip") or "").strip()
+        if cf_ip:
+            return cf_ip
         real_ip = (request.headers.get("x-real-ip") or "").strip()
         if real_ip:
             return real_ip
@@ -199,6 +202,22 @@ def _client_ip(request: Request) -> str:
         if xff:
             return xff[-1]
     return peer
+
+
+def _allowed_origins_set() -> set[str]:
+    """Đọc danh sách origin được phép (vd Vercel frontend rewrite https://repoksv.tuanpq.com)."""
+    raw = (os.environ.get("ALLOWED_ORIGINS") or "").strip()
+    allowed: set[str] = set()
+    for item in raw.split(","):
+        val = item.strip().rstrip("/")
+        if not val:
+            continue
+        parsed = urllib.parse.urlsplit(val)
+        scheme = parsed.scheme.lower()
+        netloc = parsed.netloc.lower()
+        if scheme in {"http", "https"} and netloc:
+            allowed.add(f"{scheme}://{netloc}")
+    return allowed
 
 
 def _oauth_configured() -> bool:
@@ -509,6 +528,15 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     @app.middleware("http")
     async def security_middleware(request: Request, call_next: Any) -> Response:
         path = request.url.path
+        origin_secret = (os.environ.get("ORIGIN_SHARED_SECRET") or "").strip()
+        if origin_secret and path != "/health":
+            got_secret = (request.headers.get("x-repoksv-origin-secret") or "").strip()
+            if not hmac.compare_digest(got_secret, origin_secret):
+                return _attach_security_headers(
+                    JSONResponse({"detail": "Truy cập trực tiếp không hợp lệ."}, status_code=403),
+                    path,
+                )
+
         cl_hdr = request.headers.get("content-length")
         if cl_hdr is not None:
             try:
@@ -553,10 +581,13 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                         JSONResponse({"detail": exc.detail}, status_code=exc.status_code),
                         path,
                     )
+                origin_scheme = parsed_origin.scheme.lower()
+                origin_full = f"{origin_scheme}://{origin_host}"
+                allowed_origins = _allowed_origins_set()
                 if (
-                    parsed_origin.scheme.lower() not in {"http", "https"}
+                    origin_scheme not in {"http", "https"}
                     or not origin_host
-                    or origin_host != target_host
+                    or (origin_host != target_host and origin_full not in allowed_origins)
                 ):
                     return _attach_security_headers(
                         JSONResponse({"detail": "Origin không khớp host máy chủ (CSRF check)."}, status_code=403),

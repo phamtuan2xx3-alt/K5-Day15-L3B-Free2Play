@@ -609,6 +609,51 @@ class TestPhase5Api(unittest.TestCase):
                 self.assertEqual(res.status_code, 200, path)
                 self.assertIn(expected_ct, res.headers.get("content-type", ""), path)
 
+    def test_vercel_allowed_origins_origin_shared_secret_and_cf_connecting_ip(self):
+        # 1. ALLOWED_ORIGINS allows Vercel frontend origin during rewrite while blocking rogue origins
+        with patch.dict(os.environ, {"ALLOWED_ORIGINS": "https://repoksv.tuanpq.com"}):
+            ok_vercel = self.client.post(
+                "/api/scan",
+                json={"target": "S01"},
+                headers={"Origin": "https://repoksv.tuanpq.com", "Host": "api-repoksv.tuanpq.com"},
+            )
+            self.assertEqual(ok_vercel.status_code, 200)
+
+            bad_rogue = self.client.post(
+                "/api/scan",
+                json={"target": "S01"},
+                headers={"Origin": "https://evil.example", "Host": "api-repoksv.tuanpq.com"},
+            )
+            self.assertEqual(bad_rogue.status_code, 403)
+
+        # 2. ORIGIN_SHARED_SECRET blocks direct VPS IP hits except /health
+        with patch.dict(os.environ, {"ORIGIN_SHARED_SECRET": "top-secret-origin-lock"}):
+            self.assertEqual(self.client.get("/health").status_code, 200)
+            self.assertEqual(self.client.get("/api/submissions").status_code, 403)
+            ok_locked = self.client.get(
+                "/api/submissions",
+                headers={"X-RepoKSV-Origin-Secret": "top-secret-origin-lock"},
+            )
+            self.assertEqual(ok_locked.status_code, 200)
+
+        # 3. CF-Connecting-IP only trusted from trusted proxy peer
+        with patch.dict(os.environ, {"TRUSTED_PROXY_CIDRS": "172.18.0.0/16"}):
+            trusted_client = TestClient(self.app, client=("172.18.0.2", 50000))
+            for i in range(5):
+                r = trusted_client.post(
+                    "/api/scan",
+                    json={"target": "S01"},
+                    headers={"CF-Connecting-IP": "203.0.113.77"},
+                )
+                self.assertEqual(r.status_code, 200, i)
+            r6 = trusted_client.post(
+                "/api/scan",
+                json={"target": "S01"},
+                headers={"CF-Connecting-IP": "203.0.113.77"},
+            )
+            self.assertEqual(r6.status_code, 429)
+            trusted_client.close()
+
 
 if __name__ == "__main__":
     unittest.main()
