@@ -1,4 +1,7 @@
-# Bộ khung (run.py, codebase/, eval/run_eval.py, cost/simulate.py) chỉ dùng thư viện chuẩn của Python 3.10+:
-# KHÔNG cần pip install để chạy.
-# Nhóm dùng thêm thư viện (vd SDK của nhà cung cấp model) thì ghi tên gói vào đây, mỗi dòng một gói,
-# và ghi lệnh cài vào README: python -m pip install -r requirements.txt
+# Bộ khung Core (run.py, codebase/ai.py, tools.py, agent.py, github_guard.py, db.py, exporters.py, eval/run_eval.py, cost/simulate.py)
+# chỉ dùng thư viện chuẩn của Python 3.10+: KHÔNG cần pip install để chạy `python run.py check / eval / simulate`.
+# Các gói dưới đây phục vụ lớp Web Production (FastAPI Backend & TestClient):
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.0.0
+httpx>=0.27.0
