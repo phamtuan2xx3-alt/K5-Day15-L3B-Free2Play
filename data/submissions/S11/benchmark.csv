@@ -1,0 +1,9 @@
+id,input,expected,pass_criterion,type
+B01,<đầu vào mẫu>,<kết quả mẫu>,<tiêu chí>,thuong,nguoi_dung: P1 (ví dụ)
+Q02,Câu thử tổng hợp 02 (seed 42),Đáp án chuẩn 02,Đủ căn cứ trích dẫn và đúng quy tắc,kho
+Q03,Câu thử tổng hợp 03 (seed 42),Đáp án chuẩn 03,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
+Q04,Câu thử tổng hợp 04 (seed 42),Đáp án chuẩn 04,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
+Q05,Câu thử tổng hợp 05 (seed 42),Đáp án chuẩn 05,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
+Q06,Câu thử tổng hợp 06 (seed 42),Đáp án chuẩn 06,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
+Q07,Câu thử tổng hợp 07 (seed 42),Đáp án chuẩn 07,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
+Q08,Câu thử tổng hợp 08 (seed 42),Đáp án chuẩn 08,Đủ căn cứ trích dẫn và đúng quy tắc,thuong
