@@ -8,14 +8,16 @@ import {
   getSubmissions,
   listSessions,
   scanTarget,
-} from "./api/client.ts";
-import { AuditPanel } from "./components/AuditPanel.tsx";
-import { CiteDialog } from "./components/CiteDialog.tsx";
-import { ExportPanel } from "./components/ExportPanel.tsx";
-import { LegalPage } from "./components/LegalPages.tsx";
-import { ScanSidebar } from "./components/ScanSidebar.tsx";
-import { TopBar } from "./components/TopBar.tsx";
-import { VivaStudyPanel } from "./components/VivaStudyPanel.tsx";
+} from "@/api/client.ts";
+import { AuditPanel } from "@/components/AuditPanel.tsx";
+import { CiteDialog } from "@/components/CiteDialog.tsx";
+import { ExportPanel } from "@/components/ExportPanel.tsx";
+import { LegalPage } from "@/components/LegalPages.tsx";
+import { ScanSidebar } from "@/components/ScanSidebar.tsx";
+import { TopBar } from "@/components/TopBar.tsx";
+import { VivaStudyPanel } from "@/components/VivaStudyPanel.tsx";
+import { Alert } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import type {
   FileLineItem,
   MeResponse,
@@ -23,8 +25,8 @@ import type {
   ScanSessionDetail,
   ScanSessionSummary,
   SubmissionOption,
-} from "./types.ts";
-import { extractUrlHackTarget } from "./utils/citations.ts";
+} from "@/types.ts";
+import { extractUrlHackTarget } from "@/utils/citations.ts";
 
 type TabId = "audit" | "viva" | "export";
 
@@ -152,7 +154,6 @@ export function App() {
     [refreshSessions],
   );
 
-  // Khoi tao phien lam viec & tu dong quet URL-hack
   useEffect(() => {
     let cancelled = false;
 
@@ -191,7 +192,7 @@ export function App() {
     };
   }, [handleScan, handleSelectSession, refreshSessions]);
 
-  // Dong bo thuoc tinh hidden="until-found" va su kien beforematch cho Chrome/Firefox Ctrl+F
+  // Sync hidden="until-found" and beforematch
   useEffect(() => {
     for (const tab of TABS) {
       const panel = panelRefs.current[tab.id];
@@ -279,195 +280,225 @@ export function App() {
 
   const isLegalRoute = pathname === "/login" || pathname === "/privacy" || pathname === "/terms";
 
-  return (
-    <div className="app-shell">
-      <TopBar
-        targetInput={targetInput}
-        onTargetInputChange={setTargetInput}
-        submissions={submissions}
-        scanning={scanning}
-        onScan={(t, force) => {
-          if (isLegalRoute) navigate("/");
-          void handleScan(t, force);
-        }}
-        me={me}
-        onNavigate={navigate}
-      />
+  const footerNode = (
+    <footer className="border-t border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>RepoKSV · Giám khảo ảo AI20K (Nhóm Free2Play · NO-AUTO-GRADE)</span>
+        <nav aria-label="Liên kết pháp lý">
+          <ul className="m-0 flex list-none gap-4 p-0">
+            <li>
+              <a
+                href="/privacy"
+                className="text-primary hover:underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/privacy");
+                }}
+              >
+                Quyền riêng tư
+              </a>
+            </li>
+            <li>
+              <a
+                href="/terms"
+                className="text-primary hover:underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/terms");
+                }}
+              >
+                Điều khoản
+              </a>
+            </li>
+            <li>
+              <a
+                href="/login"
+                className="text-primary hover:underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/login");
+                }}
+              >
+                Đăng nhập
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+  );
 
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       {isLegalRoute ? (
-        <LegalPage route={pathname as "/login" | "/privacy" | "/terms"} onNavigate={navigate} />
+        <>
+          <TopBar
+            targetInput={targetInput}
+            onTargetInputChange={setTargetInput}
+            submissions={submissions}
+            scanning={scanning}
+            showBrandOnDesktop
+            onScan={(t, force) => {
+              navigate("/");
+              void handleScan(t, force);
+            }}
+            onNavigate={navigate}
+          />
+          <LegalPage route={pathname as "/login" | "/privacy" | "/terms"} onNavigate={navigate} />
+          {footerNode}
+        </>
       ) : (
-        <main id="main-content" className="workspace" tabIndex={-1}>
+        <div className="grid flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
           <ScanSidebar
             sessions={sessions}
             activeScanId={activeSession?.scan_id ?? null}
             onSelectSession={(id) => void handleSelectSession(id)}
             loading={sessionsLoading}
+            me={me}
+            onNavigate={navigate}
           />
 
-          <section className="main-dossier" aria-label="Bảng kiểm toán và luyện phản biện">
-            {globalError && (
-              <div className="alert alert-error" role="alert" style={{ margin: "1rem 1.25rem 0" }}>
-                {globalError}
-              </div>
-            )}
+          <div className="order-first lg:order-last flex min-w-0 flex-col bg-background">
+            <TopBar
+              targetInput={targetInput}
+              onTargetInputChange={setTargetInput}
+              submissions={submissions}
+              scanning={scanning}
+              onScan={(t, force) => void handleScan(t, force)}
+              onNavigate={navigate}
+            />
 
-            {needsAuth ? (
-              <div className="tabpanel-inner">
-                <h1 style={{ fontSize: "1.35rem", marginTop: 0 }}>Đăng nhập để quét &amp; lưu hồ sơ Bloom</h1>
-                <p style={{ color: "var(--ink-muted)" }}>
-                  Máy chủ hiện yêu cầu tài khoản Google (chế độ Guest Demo đang tắt).
-                </p>
-                <a href="/auth/google" className="btn btn-primary">
-                  Đăng nhập Google
-                </a>
-              </div>
-            ) : !activeSession ? (
-              <div className="tabpanel-inner">
-                <h1 style={{ fontSize: "1.35rem", marginTop: 0 }}>
-                  {scanning ? "Đang quét…" : "Chọn S01–S30 hoặc dán link GitHub"}
-                </h1>
-                {submissions.length > 0 && (
-                  <div className="action-row">
-                    {submissions.slice(0, 4).map((sub) => (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={scanning}
-                        onClick={() => {
-                          setTargetInput(sub.id);
-                          void handleScan(sub.id, false);
-                        }}
-                      >
-                        Thử {sub.id}
-                      </button>
-                    ))}
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="flex-1 min-w-0"
+              aria-label="Bảng kiểm toán và luyện phản biện"
+            >
+              {globalError && (
+                <Alert variant="destructive" role="alert" className="mx-4 mt-4 w-auto sm:mx-6">
+                  {globalError}
+                </Alert>
+              )}
+
+              {needsAuth ? (
+                <div className="tabpanel-inner space-y-3">
+                  <h1 className="m-0 text-xl font-bold tracking-tight">Đăng nhập để quét &amp; lưu hồ sơ Bloom</h1>
+                  <p className="m-0 text-sm text-muted-foreground">
+                    Máy chủ hiện yêu cầu tài khoản Google.
+                  </p>
+                  <a
+                    href="/auth/google"
+                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:bg-primary/90"
+                  >
+                    Đăng nhập Google
+                  </a>
+                </div>
+              ) : !activeSession ? (
+                <div className="tabpanel-inner space-y-3">
+                  <h1 className="m-0 text-xl font-bold tracking-tight">
+                    {scanning ? "Đang quét…" : "Chọn S01–S30 hoặc dán link GitHub"}
+                  </h1>
+                  {submissions.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {submissions.slice(0, 4).map((sub) => (
+                        <Button
+                          key={sub.id}
+                          type="button"
+                          variant="secondary"
+                          disabled={scanning}
+                          onClick={() => {
+                            setTargetInput(sub.id);
+                            void handleScan(sub.id, false);
+                          }}
+                        >
+                          Thử {sub.id}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <h1 className="sr-only">Kiểm toán và Vấn đáp: {activeSession.source_label}</h1>
+                  <div
+                    role="tablist"
+                    aria-label="Khu vực làm việc RepoKSV"
+                    className="flex overflow-x-auto border-b border-border bg-card/40 px-4 sm:px-6 gap-1"
+                    onKeyDown={handleTabKeyDown}
+                  >
+                    {TABS.map((tab) => {
+                      const selected = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          ref={(el) => {
+                            tabRefs.current[tab.id] = el;
+                          }}
+                          type="button"
+                          role="tab"
+                          id={`${baseId}-tab-${tab.id}`}
+                          aria-controls={`${baseId}-panel-${tab.id}`}
+                          aria-selected={selected}
+                          tabIndex={selected ? 0 : -1}
+                          className="tab-btn"
+                          onClick={() => selectTab(tab.id)}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <h1 className="sr-only">Kiểm toán và Vấn đáp: {activeSession.source_label}</h1>
-                <div
-                  role="tablist"
-                  aria-label="Khu vực làm việc RepoKSV"
-                  className="tablist"
-                  onKeyDown={handleTabKeyDown}
-                >
-                  {TABS.map((tab) => {
-                    const selected = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        ref={(el) => {
-                          tabRefs.current[tab.id] = el;
-                        }}
-                        type="button"
-                        role="tab"
-                        id={`${baseId}-tab-${tab.id}`}
-                        aria-controls={`${baseId}-panel-${tab.id}`}
-                        aria-selected={selected}
-                        tabIndex={selected ? 0 : -1}
-                        className="tab-btn"
-                        onClick={() => selectTab(tab.id)}
-                      >
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
 
-                <div
-                  ref={(el) => {
-                    panelRefs.current.audit = el;
-                  }}
-                  role="tabpanel"
-                  id={`${baseId}-panel-audit`}
-                  aria-labelledby={`${baseId}-tab-audit`}
-                  className="tabpanel"
-                >
-                  <AuditPanel
-                    session={activeSession}
-                    diff={activeDiff}
-                    onSelectCite={(f, l) => void handleOpenCite(f, l)}
-                  />
-                </div>
+                  <div
+                    ref={(el) => {
+                      panelRefs.current.audit = el;
+                    }}
+                    role="tabpanel"
+                    id={`${baseId}-panel-audit`}
+                    aria-labelledby={`${baseId}-tab-audit`}
+                    className="tabpanel"
+                  >
+                    <AuditPanel
+                      session={activeSession}
+                      diff={activeDiff}
+                      onSelectCite={(f, l) => void handleOpenCite(f, l)}
+                    />
+                  </div>
 
-                <div
-                  ref={(el) => {
-                    panelRefs.current.viva = el;
-                  }}
-                  role="tabpanel"
-                  id={`${baseId}-panel-viva`}
-                  aria-labelledby={`${baseId}-tab-viva`}
-                  className="tabpanel"
-                >
-                  <VivaStudyPanel
-                    session={activeSession}
-                    onSelectCite={(f, l) => void handleOpenCite(f, l)}
-                  />
-                </div>
+                  <div
+                    ref={(el) => {
+                      panelRefs.current.viva = el;
+                    }}
+                    role="tabpanel"
+                    id={`${baseId}-panel-viva`}
+                    aria-labelledby={`${baseId}-tab-viva`}
+                    className="tabpanel"
+                  >
+                    <VivaStudyPanel
+                      session={activeSession}
+                      onSelectCite={(f, l) => void handleOpenCite(f, l)}
+                    />
+                  </div>
 
-                <div
-                  ref={(el) => {
-                    panelRefs.current.export = el;
-                  }}
-                  role="tabpanel"
-                  id={`${baseId}-panel-export`}
-                  aria-labelledby={`${baseId}-tab-export`}
-                  className="tabpanel"
-                >
-                  <ExportPanel session={activeSession} />
-                </div>
-              </>
-            )}
-          </section>
-        </main>
-      )}
+                  <div
+                    ref={(el) => {
+                      panelRefs.current.export = el;
+                    }}
+                    role="tabpanel"
+                    id={`${baseId}-panel-export`}
+                    aria-labelledby={`${baseId}-tab-export`}
+                    className="tabpanel"
+                  >
+                    <ExportPanel session={activeSession} />
+                  </div>
+                </>
+              )}
+            </main>
 
-      <footer className="site-footer">
-        <div className="footer-inner">
-          <span>RepoKSV · Giám khảo ảo AI20K (Nhóm Free2Play · NO-AUTO-GRADE)</span>
-          <nav aria-label="Liên kết pháp lý">
-            <ul className="footer-links">
-              <li>
-                <a
-                  href="/privacy"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate("/privacy");
-                  }}
-                >
-                  Quyền riêng tư
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/terms"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate("/terms");
-                  }}
-                >
-                  Điều khoản
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/login"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate("/login");
-                  }}
-                >
-                  Đăng nhập
-                </a>
-              </li>
-            </ul>
-          </nav>
+            {footerNode}
+          </div>
         </div>
-      </footer>
+      )}
 
       <CiteDialog
         open={citeState.open}

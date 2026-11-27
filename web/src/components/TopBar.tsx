@@ -1,5 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
-import type { MeResponse, SubmissionOption, ThemeMode } from "../types.ts";
+import type { FormEvent } from "react";
+import { RefreshCw, Search } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import type { SubmissionOption } from "@/types.ts";
 
 interface TopBarProps {
   targetInput: string;
@@ -7,30 +10,14 @@ interface TopBarProps {
   submissions: SubmissionOption[];
   scanning: boolean;
   onScan: (target: string, forceRefresh?: boolean) => void;
-  me: MeResponse | null;
   onNavigate: (path: string) => void;
+  showBrandOnDesktop?: boolean;
 }
 
-function getSystemThemeLabel(): "Sáng" | "Tối" {
-  if (typeof window === "undefined" || !window.matchMedia) return "Sáng";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "Tối" : "Sáng";
-}
-
-function readStoredTheme(): ThemeMode {
-  try {
-    const val = localStorage.getItem("color-scheme");
-    if (val === "light" || val === "dark") return val;
-  } catch {
-    // ignore storage access issues
-  }
-  return "system";
-}
-
-function applyThemeMeta(mode: ThemeMode) {
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]');
-  if (meta) {
-    meta.content = mode === "system" ? "light dark" : mode;
-  }
+function formatOptionLabel(sub: SubmissionOption): string {
+  const raw = (sub.title || sub.label || "").trim();
+  if (!raw) return sub.id;
+  return raw.length > 18 ? `${sub.id} · ${raw.slice(0, 17)}…` : `${sub.id} · ${raw}`;
 }
 
 export function TopBar({
@@ -39,50 +26,9 @@ export function TopBar({
   submissions,
   scanning,
   onScan,
-  me,
   onNavigate,
+  showBrandOnDesktop = false,
 }: TopBarProps) {
-  const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
-  const [sysLabel, setSysLabel] = useState<"Sáng" | "Tối">(() => getSystemThemeLabel());
-
-  useEffect(() => {
-    applyThemeMeta(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onMqChange = () => {
-      setSysLabel(mq.matches ? "Tối" : "Sáng");
-    };
-    mq.addEventListener("change", onMqChange);
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "color-scheme") {
-        setTheme(readStoredTheme());
-      }
-    };
-    window.addEventListener("storage", onStorage);
-
-    return () => {
-      mq.removeEventListener("change", onMqChange);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
-
-  const handleSelectTheme = (next: ThemeMode) => {
-    setTheme(next);
-    try {
-      if (next === "system") {
-        localStorage.removeItem("color-scheme");
-      } else {
-        localStorage.setItem("color-scheme", next);
-      }
-    } catch {
-      // ignore storage errors, meta still updated
-    }
-    applyThemeMeta(next);
-  };
-
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = targetInput.trim();
@@ -91,42 +37,53 @@ export function TopBar({
   };
 
   return (
-    <header className="topbar">
-      <div className="topbar-inner">
+    <header className="min-h-14 border-b border-border bg-card px-4 py-2 sm:px-6 flex items-center">
+      <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <a
           href="/"
-          className="brand-mark"
+          className={
+            showBrandOnDesktop
+              ? "inline-flex items-center gap-2.5 text-foreground no-underline shrink-0"
+              : "inline-flex items-center gap-2.5 text-foreground no-underline lg:hidden shrink-0"
+          }
           onClick={(e) => {
             e.preventDefault();
             onNavigate("/");
           }}
         >
-          <img src="/repoksv-logo-120.png" alt="" className="brand-logo" width={34} height={34} />
-          <span>
-            RepoKSV
-            <span className="brand-sub">Kiểm Sát Viên · Free2Play</span>
-          </span>
+          <img src="/repoksv-logo-120.png" alt="" className="brand-logo" width={30} height={30} />
+          <span className="text-sm font-bold tracking-tight">RepoKSV</span>
         </a>
 
-        <form className="scan-bar" onSubmit={handleSubmit} aria-label="Quét hồ sơ hoặc link GitHub">
+        <form
+          className="flex flex-1 flex-wrap items-center gap-2 lg:flex-nowrap"
+          onSubmit={handleSubmit}
+          aria-label="Quét hồ sơ hoặc link GitHub"
+        >
           <label htmlFor="repo-target-input" className="skip-link">
             URL GitHub hoặc mã hồ sơ
           </label>
-          <input
-            id="repo-target-input"
-            name="target"
-            type="text"
-            autoComplete="off"
-            spellCheck={false}
-            className="scan-input"
-            value={targetInput}
-            onChange={(e) => onTargetInputChange(e.target.value)}
-            placeholder="https://github.com/owner/repo hoặc S01–S30…"
-          />
+          <div className="relative min-w-0 flex-1 basis-52">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="repo-target-input"
+              name="target"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              className="pl-8 font-mono text-[13px]"
+              value={targetInput}
+              onChange={(e) => onTargetInputChange(e.target.value)}
+              placeholder="https://github.com/owner/repo hoặc S01–S30…"
+            />
+          </div>
 
           <select
             aria-label="Chọn nhanh hồ sơ mẫu S01 đến S30"
-            className="sample-select"
+            className="h-9 max-w-[175px] truncate rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             value={/^S\d{2}$/i.test(targetInput.trim()) ? targetInput.trim().toUpperCase() : ""}
             onChange={(e) => {
               const val = e.target.value;
@@ -138,91 +95,27 @@ export function TopBar({
           >
             <option value="">Mẫu S01–S30…</option>
             {submissions.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.id}
-                {sub.title || sub.label ? ` — ${sub.title || sub.label}` : ""}
+              <option key={sub.id} value={sub.id} title={sub.title || sub.label || sub.id}>
+                {formatOptionLabel(sub)}
               </option>
             ))}
           </select>
 
-          <button type="submit" className="btn btn-primary" disabled={scanning || !targetInput.trim()}>
+          <Button type="submit" disabled={scanning || !targetInput.trim()}>
             {scanning ? "Đang quét…" : "Quét hồ sơ"}
-          </button>
-          <button
+          </Button>
+
+          <Button
             type="button"
-            className="btn btn-secondary"
+            variant="secondary"
             disabled={scanning || !targetInput.trim()}
             onClick={() => onScan(targetInput.trim(), true)}
             title="Bỏ qua cache và kiểm tra lại trực tiếp"
           >
+            <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
             Quét lại
-          </button>
+          </Button>
         </form>
-
-        <div className="topbar-controls">
-          <fieldset className="theme-fieldset" aria-label="Chọn giao diện sáng tối">
-            <button
-              type="button"
-              className="theme-btn"
-              aria-pressed={theme === "system"}
-              onClick={() => handleSelectTheme("system")}
-              title={`Theo hệ thống (Hiện đang ${sysLabel})`}
-            >
-              Hệ thống ({sysLabel})
-            </button>
-            <button
-              type="button"
-              className="theme-btn"
-              aria-pressed={theme === "light"}
-              onClick={() => handleSelectTheme("light")}
-            >
-              Sáng
-            </button>
-            <button
-              type="button"
-              className="theme-btn"
-              aria-pressed={theme === "dark"}
-              onClick={() => handleSelectTheme("dark")}
-            >
-              Tối
-            </button>
-          </fieldset>
-
-          {me?.authenticated && me.user ? (
-            <div className="auth-pill">
-              {me.user.picture_url && (
-                <img
-                  src={me.user.picture_url}
-                  alt={me.user.display_name || me.user.email}
-                  className="auth-avatar"
-                  width={24}
-                  height={24}
-                  referrerPolicy="no-referrer"
-                />
-              )}
-              <span title={me.user.email}>{me.user.display_name || me.user.email}</span>
-              <form method="POST" action="/auth/logout" style={{ margin: 0 }}>
-                <button type="submit" className="btn btn-secondary" style={{ padding: "0.24rem 0.55rem", fontSize: "0.78rem" }}>
-                  Đăng xuất
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="auth-pill">
-              {me?.guest_demo ? (
-                <span className="stamp stamp-navy">
-                  Guest Demo{typeof me.guest_remaining === "number" ? ` (${me.guest_remaining})` : ""}
-                </span>
-              ) : null}
-              <a href="/auth/google" className="btn btn-secondary btn-google" style={{ padding: "0.28rem 0.65rem", fontSize: "0.82rem" }}>
-                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24">
-                  <path fill="currentColor" d="M21.8 12.23c0-.68-.06-1.36-.18-2.02H12v3.83h5.5a4.7 4.7 0 0 1-2.04 3.09v2.56h3.3c1.93-1.78 3.04-4.4 3.04-7.46ZM12 22c2.75 0 5.06-.91 6.75-2.47l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2H2.89v2.64A10 10 0 0 0 12 22ZM6.3 13.74A5.98 5.98 0 0 1 6 12c0-.6.1-1.19.3-1.74V7.62H2.89A10 10 0 0 0 2 12c0 1.61.39 3.14 1.09 4.38l3.21-2.64ZM12 6.06c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.99 14.74 2 12 2a10 10 0 0 0-9.11 5.62l3.41 2.64C7.1 7.85 9.35 6.06 12 6.06Z" />
-                </svg>
-                Đăng nhập Google
-              </a>
-            </div>
-          )}
-        </div>
       </div>
     </header>
   );

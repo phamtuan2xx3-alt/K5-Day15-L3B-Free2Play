@@ -1,5 +1,10 @@
 import { useEffect, useId, useRef } from "react";
-import type { FileLineItem } from "../types.ts";
+import { X } from "lucide-react";
+import { Alert } from "@/components/ui/alert.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { cn } from "@/lib/utils.ts";
+import type { FileLineItem } from "@/types.ts";
 
 interface CiteDialogProps {
   open: boolean;
@@ -89,28 +94,32 @@ export function CiteDialog({
       className="cite-dialog"
     >
       <div className="dialog-head">
-        <div>
-          <strong id={titleId}>{file}</strong>{" "}
-          <span className="stamp stamp-navy">L{String(targetLine).padStart(2, "0")}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <strong id={titleId} className="truncate font-mono text-sm">
+            {file}
+          </strong>
+          <Badge>L{String(targetLine).padStart(2, "0")}</Badge>
         </div>
-        <button
+        <Button
           type="button"
-          className="btn btn-secondary"
+          variant="secondary"
+          size="sm"
           onClick={() => dialogRef.current?.close()}
         >
+          <X aria-hidden="true" className="h-3.5 w-3.5" />
           Đóng
-        </button>
+        </Button>
       </div>
 
       <div className="dialog-body scroller">
-        {loading && <p style={{ paddingInline: "1.15rem" }}>Đang tải nội dung nguồn…</p>}
+        {loading && <p className="px-4 text-xs text-muted-foreground">Đang tải nội dung nguồn…</p>}
         {error && (
-          <div className="alert alert-error" style={{ marginInline: "1.15rem" }}>
+          <Alert variant="destructive" className="mx-4 w-auto">
             {error}
-          </div>
+          </Alert>
         )}
         {!loading && !error && lines.length === 0 && (
-          <p style={{ paddingInline: "1.15rem" }}>Không có dòng nào để hiển thị.</p>
+          <p className="px-4 text-xs text-muted-foreground">Không có dòng nào.</p>
         )}
         {!loading &&
           !error &&
@@ -120,7 +129,7 @@ export function CiteDialog({
               <div
                 key={item.line}
                 ref={isTarget ? targetRowRef : undefined}
-                className={`code-line${isTarget ? " is-target" : ""}`}
+                className={cn("code-line", isTarget && "is-target")}
               >
                 <span className="code-ln">L{String(item.line).padStart(2, "0")}</span>
                 <span className="code-text">{item.text}</span>

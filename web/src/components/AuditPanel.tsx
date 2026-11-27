@@ -1,5 +1,9 @@
-import type { GitHubCheckStatus, ScanDiffSummary, ScanSessionDetail } from "../types.ts";
-import { CiteText } from "./CiteText.tsx";
+import { AlertTriangle, CheckCircle2, HelpCircle, ShieldAlert } from "lucide-react";
+import { InlineMarkdown, MarkdownView } from "@/components/MarkdownView.tsx";
+import { Alert } from "@/components/ui/alert.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Card, CardContent, CardHeader } from "@/components/ui/card.tsx";
+import type { GitHubCheckStatus, ScanDiffSummary, ScanSessionDetail } from "@/types.ts";
 
 interface AuditPanelProps {
   session: ScanSessionDetail;
@@ -39,17 +43,17 @@ function normalizeChecks(
       detail:
         sourceType === "github"
           ? "Chưa có trạng thái từ GitHub Live Guard."
-          : `${item.desc} (Kiểm tra trên hồ sơ mẫu offline).`,
+          : `${item.desc} (Kiểm tra hồ sơ mẫu offline).`,
     };
   });
 }
 
-function statusStampClass(status: string): string {
+function statusVariant(status: string): "success" | "destructive" | "warning" | "default" {
   const s = status.toLowerCase();
-  if (s === "pass" || s === "ok" || s === "clean") return "stamp stamp-teal";
-  if (s === "fail" || s === "error" || s === "flagged") return "stamp stamp-crimson";
-  if (s === "warn" || s === "g10" || s === "unknown") return "stamp stamp-warn";
-  return "stamp stamp-navy";
+  if (s === "pass" || s === "ok" || s === "clean") return "success";
+  if (s === "fail" || s === "error" || s === "flagged") return "destructive";
+  if (s === "warn" || s === "g10" || s === "unknown") return "warning";
+  return "default";
 }
 
 function statusLabel(status: string): string {
@@ -60,82 +64,115 @@ function statusLabel(status: string): string {
   return status.toUpperCase();
 }
 
+function StatusIcon({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  if (s === "pass" || s === "ok" || s === "clean") {
+    return <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />;
+  }
+  if (s === "fail" || s === "error" || s === "flagged") {
+    return <ShieldAlert aria-hidden="true" className="h-3.5 w-3.5 text-destructive" />;
+  }
+  if (s === "warn" || s === "g10" || s === "unknown") {
+    return <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />;
+  }
+  return <HelpCircle aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
 export function AuditPanel({ session, diff, onSelectCite }: AuditPanelProps) {
   const checks = normalizeChecks(session.checks, session.source_type);
 
   return (
-    <div className="tabpanel-inner">
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.75rem", marginBottom: "1rem" }}>
+    <div className="tabpanel-inner space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 style={{ margin: "0 0 0.25rem", fontSize: "1.18rem" }}>
+          <h2 className="m-0 text-lg font-semibold tracking-tight text-foreground">
             Hồ sơ kiểm toán: {session.source_label}
           </h2>
-          <div style={{ fontSize: "0.84rem", color: "var(--ink-muted)", display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-            <span>Chế độ: <strong>{session.mode === "team" ? "Nhóm" : "Cá nhân"}</strong></span>
-            {session.commit_sha ? <span>Commit: <code>{session.commit_sha.slice(0, 7)}</code></span> : null}
-            <span>Mã phiên: <code>{session.scan_id}</code></span>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Chế độ: <strong className="text-foreground">{session.mode === "team" ? "Nhóm" : "Cá nhân"}</strong>
+            </span>
+            {session.commit_sha ? (
+              <span>
+                Commit: <code className="font-mono">{session.commit_sha.slice(0, 7)}</code>
+              </span>
+            ) : null}
+            <span>
+              Phiên: <code className="font-mono">{session.scan_id}</code>
+            </span>
           </div>
         </div>
 
         {diff && diff.previous_scan_id ? (
-          <div className="alert alert-info" style={{ margin: 0, padding: "0.45rem 0.75rem" }}>
-            So với phiên trước (<code>{diff.previous_scan_id.slice(-12)}</code>):{" "}
+          <Alert variant="info" className="w-auto py-1.5 px-3 text-xs">
+            So với <code className="font-mono">{diff.previous_scan_id.slice(-10)}</code>:{" "}
             <strong>
               {typeof diff.flags_delta === "number"
                 ? diff.flags_delta < 0
-                  ? `Giảm ${Math.abs(diff.flags_delta)} lỗi cứng`
+                  ? `Giảm ${Math.abs(diff.flags_delta)} lỗi`
                   : diff.flags_delta > 0
-                    ? `Tăng +${diff.flags_delta} lỗi cứng`
-                    : "Không đổi số lỗi cứng"
+                    ? `Tăng +${diff.flags_delta} lỗi`
+                    : "Không đổi"
                 : diff.summary || "Đã đối chiếu"}
             </strong>
-          </div>
+          </Alert>
         ) : null}
       </div>
 
-      {/* 4 the trang thai GitHub song */}
-      <div className="status-grid" role="region" aria-label="4 lớp kiểm tra GitHub Live Guard">
+      {/* 4 GitHub Live Guard status cards */}
+      <div
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        role="region"
+        aria-label="4 lớp kiểm tra GitHub Live Guard"
+      >
         {checks.map((chk) => (
-          <div key={chk.key} className="status-card">
-            <div className="status-card-head">
-              <span className="status-card-title">{chk.label || chk.key}</span>
-              <span className={statusStampClass(chk.status)}>{statusLabel(chk.status)}</span>
-            </div>
-            <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--ink-muted)" }}>
-              <CiteText text={chk.detail} onSelectCite={onSelectCite} />
-            </p>
-          </div>
+          <Card key={chk.key} className="status-card bg-card shadow-none">
+            <CardHeader className="flex-row items-center justify-between gap-2 p-3 pb-1.5">
+              <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-foreground">
+                <StatusIcon status={chk.status} />
+                {chk.label || chk.key}
+              </span>
+              <Badge variant={statusVariant(chk.status)}>{statusLabel(chk.status)}</Badge>
+            </CardHeader>
+            <CardContent className="p-3 pt-0 text-xs text-muted-foreground leading-relaxed">
+              <InlineMarkdown text={chk.detail} onSelectCite={onSelectCite} />
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* File thieu bat buoc (HAX G10) */}
+      {/* Missing required files (HAX G10) */}
       {session.missing_required && session.missing_required.length > 0 ? (
-        <div className="alert alert-info" role="status">
-          <strong>CHƯA KIỂM ĐƯỢC (HAX G10) — Thiếu file bắt buộc:</strong>{" "}
+        <Alert variant="info" role="status">
+          <strong>HAX G10 — Thiếu file bắt buộc:</strong>{" "}
           {session.missing_required.map((fname, idx) => (
             <span key={fname}>
               {idx > 0 ? ", " : ""}
-              <code>{fname}</code>
+              <code className="font-mono text-xs">{fname}</code>
             </span>
           ))}
-        </div>
+        </Alert>
       ) : null}
 
-      {/* Danh sach loi cung */}
-      <section aria-labelledby="hard-flags-heading" style={{ marginBottom: "1.25rem" }}>
-        <h3 id="hard-flags-heading" style={{ fontSize: "1rem", margin: "0 0 0.6rem" }}>
-          Lỗi cứng từ bộ quét code ({session.hard_flags.length})
+      {/* Hard flags */}
+      <section aria-labelledby="hard-flags-heading" className="space-y-2.5">
+        <h3 id="hard-flags-heading" className="m-0 text-sm font-semibold text-foreground">
+          Lỗi cứng ({session.hard_flags.length})
         </h3>
         {session.hard_flags.length === 0 ? (
-          <div className="alert alert-ok">Không phát hiện lỗi cứng từ bộ quét code.</div>
+          <Alert variant="success">Không phát hiện lỗi cứng.</Alert>
         ) : (
-          <ul className="flags-list">
+          <ul className="m-0 grid list-none gap-2 p-0">
             {session.hard_flags.map((flag, idx) => {
               const lineNum = Number.parseInt(String(flag.line), 10) || 1;
               return (
-                <li key={`${flag.rule_id}-${flag.file}-${idx}`} className="flag-row">
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
-                    <span className="stamp stamp-crimson">{flag.rule_id}</span>
+                <li
+                  key={`${flag.rule_id}-${flag.file}-${idx}`}
+                  className="rounded-lg border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-3.5 py-2.5 text-sm"
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Badge variant="destructive">{flag.rule_id}</Badge>
                     <button
                       type="button"
                       className="cite-chip"
@@ -144,8 +181,8 @@ export function AuditPanel({ session, diff, onSelectCite }: AuditPanelProps) {
                       {flag.file}:L{String(lineNum).padStart(2, "0")}
                     </button>
                   </div>
-                  <div>
-                    <CiteText text={flag.detail} onSelectCite={onSelectCite} />
+                  <div className="text-sm text-foreground">
+                    <InlineMarkdown text={flag.detail} onSelectCite={onSelectCite} />
                   </div>
                 </li>
               );
@@ -154,13 +191,13 @@ export function AuditPanel({ session, diff, onSelectCite }: AuditPanelProps) {
         )}
       </section>
 
-      {/* Bao cao doi chieu rubric AI + chip file:Lxx */}
-      <section aria-labelledby="ai-audit-heading">
-        <h3 id="ai-audit-heading" style={{ fontSize: "1rem", margin: "0 0 0.6rem" }}>
-          Báo cáo đối chiếu chéo Rubric (bấm chip <code>file:Lxx</code> để mở đúng dòng nguồn)
+      {/* AI Audit Report with safe MarkdownView */}
+      <section aria-labelledby="ai-audit-heading" className="space-y-2.5">
+        <h3 id="ai-audit-heading" className="m-0 text-sm font-semibold text-foreground">
+          Báo cáo đối chiếu Rubric
         </h3>
-        <div className="audit-prose">
-          <CiteText text={session.audit_output} onSelectCite={onSelectCite} />
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-5 max-w-[78ch]">
+          <MarkdownView text={session.audit_output} onSelectCite={onSelectCite} />
         </div>
       </section>
     </div>

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchExportPreview, getExportUrl } from "../api/client.ts";
-import type { ExportFormat, ScanSessionDetail } from "../types.ts";
-import { slugifyMember } from "../utils/citations.ts";
+import { Download } from "lucide-react";
+import { fetchExportPreview, getExportUrl } from "@/api/client.ts";
+import { Alert } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import type { ExportFormat, ScanSessionDetail } from "@/types.ts";
+import { slugifyMember } from "@/utils/citations.ts";
 
 interface ExportPanelProps {
   session: ScanSessionDetail;
@@ -83,18 +86,18 @@ export function ExportPanel({ session }: ExportPanelProps) {
   const downloadHref = getExportUrl(selectedFmt, session.scan_id, memberSlug);
 
   return (
-    <div className="tabpanel-inner">
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.75rem", marginBottom: "1rem" }}>
-        <h2 style={{ margin: 0, fontSize: "1.15rem" }}>Xuất dữ liệu</h2>
+    <div className="tabpanel-inner space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="m-0 text-lg font-semibold tracking-tight text-foreground">Xuất dữ liệu</h2>
 
         {session.members.length >= 2 ? (
-          <div className="field-group">
-            <label htmlFor="export-member-select" className="field-label">
-              Hồ sơ thành viên
+          <div className="flex items-center gap-2">
+            <label htmlFor="export-member-select" className="text-xs font-medium text-muted-foreground">
+              Thành viên
             </label>
             <select
               id="export-member-select"
-              className="select-input"
+              className="h-9 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               value={memberName}
               onChange={(e) => setMemberName(e.target.value)}
             >
@@ -108,38 +111,43 @@ export function ExportPanel({ session }: ExportPanelProps) {
         ) : null}
       </div>
 
-      <div className="export-controls" role="group" aria-label="Chọn định dạng xuất">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Chọn định dạng xuất">
         {FORMAT_META.map((item) => (
-          <button
+          <Button
             key={item.fmt}
             type="button"
-            className={`btn ${selectedFmt === item.fmt ? "btn-primary" : "btn-secondary"}`}
+            variant={selectedFmt === item.fmt ? "default" : "secondary"}
             onClick={() => void handlePreview(item.fmt)}
             disabled={loading}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
 
         <a
           href={downloadHref}
           download={filename || undefined}
-          className="btn btn-teal"
-          style={{ marginInlineStart: "auto" }}
+          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-500/10 px-3.5 text-sm font-medium text-emerald-800 no-underline hover:bg-emerald-500/15 dark:border-emerald-400/40 dark:text-emerald-300 transition-colors"
         >
+          <Download aria-hidden="true" className="h-3.5 w-3.5" />
           Tải file ({activeMeta.ext})
         </a>
       </div>
 
       {errorMsg && (
-        <div className="alert alert-error" role="alert">
+        <Alert variant="destructive" role="alert">
           {errorMsg}
-        </div>
+        </Alert>
       )}
 
       <details className="disclosure">
-        <summary>Xem trước ({activeMeta.ext}) — {activeMeta.desc}</summary>
-        <pre className="code-preview scroller" aria-label="Xem trước nội dung file xuất">
+        <summary>
+          Xem trước ({activeMeta.ext}) — {activeMeta.desc}
+        </summary>
+        <pre
+          className="code-preview scroller max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-card p-3 font-mono text-xs leading-relaxed text-foreground"
+          aria-label="Xem trước nội dung file xuất"
+        >
           {loading ? "Đang tạo…" : previewText || "(Trống)"}
         </pre>
       </details>
