@@ -1,0 +1,3 @@
+id,so_bai_14_ngay,loi_lap_lai,thoi_gian_ra_moi_dot,loi_script_khong_bat,san_long_phong_van
+C01,Dưới 10 bài,"Nộp sót file, thiếu mục bắt buộc hoặc sai format (vd TEAMS, CSV, YAML), Fork bài từ khoá về nhưng tạo PR / push nhầm lên repo gốc của chương trình thay vì repo fork",15–30 phút,,Khong
+C02,Dưới 10 bài,"Nộp sót file, thiếu mục bắt buộc hoặc sai format (vd TEAMS, CSV, YAML), Lộ thông tin nhạy cảm / API key / file .env trong repo công khai",15–30 phút,,Khong
