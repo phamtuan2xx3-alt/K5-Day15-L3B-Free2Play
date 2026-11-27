@@ -41,8 +41,18 @@ Data nói __; người dùng nói __. Khớp / lệch ở đâu, vì sao: __
 
 Giả thuyết ở `evidence/hypothesis.md`: **đúng / sai / phải đổi** — vì __. Điều vẫn chưa biết: __
 
+## Tiến độ (dùng cho CP2)
+
+| Nguồn | Kế hoạch | Đã làm đến đâu |
+|---|---|---|
+| Khảo sát (nguồn chính) | ≥20 học viên L3 ngoài nhóm · bộ câu `evidence/survey/questions.md` | Gửi lúc __ qua __ · đã có __ phiếu |
+| Phỏng vấn (nguồn kiểm lại) | ≥3 học viên ngoài nhóm + 1–2 lab coach · kịch bản `evidence/interviews/GUIDE.md` | Đã xong __ / __ |
+
 ## Lịch hẹn (dùng cho CP2 — chỉ ghi vai và giờ, không tên)
 
 | Vai | Giờ hẹn | Đã xong? |
 |---|---|---|
-| | | |
+| Học viên L3B ngoài nhóm (P1) | __ | ☐ |
+| Học viên L3B ngoài nhóm (P2) | __ | ☐ |
+| Học viên L3B ngoài nhóm (P3) | __ | ☐ |
+| Lab coach (P4) | trước 19:30 hôm nay | ☐ |
