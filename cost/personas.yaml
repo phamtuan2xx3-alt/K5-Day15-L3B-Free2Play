@@ -2,8 +2,9 @@
 # Mọi số phải có nguồn (data / phỏng vấn / khảo sát / quy mô khoá có nguồn) hoặc ghi rõ "(tự ước tính)".
 # Chạy: python run.py simulate --try   (10 phiên, kiểm khung — làm trước CP3)
 #       python run.py simulate         (đủ số phiên dưới đây — bản nộp CP4)
-# BẢN NHÁP 27/11: tần suất đang là (tự ước tính) theo docs/track-a6-brief.md.
-#   Sau khảo sát: thay bằng số từ câu 2 (số bài nộp / 14 ngày, nhân 2 ra / tháng) và câu 4, ghi nguồn "khảo sát n = __, câu __".
+# Cập nhật 27/11 19:40: tỉ lệ và tần suất lấy từ khảo sát câu 2 (evidence/survey/results.csv, chạy evidence/survey/tally.py).
+#   n = 25 học viên đã nộp; bỏ 1 người "Không nhớ" → 24 người chia 3 nhóm. Giả định 1 lần nộp = 1 lần soát (tự ước tính).
+#   Số lần / tháng = điểm giữa khoảng trên 14 ngày × 2 (tự ước tính). Số lượt hỏi / phiên vẫn là (tự ước tính).
 
 sessions: 50        # số phiên mô phỏng — bản nộp ≥50
 seed: 42            # giữ cố định để chạy lại ra cùng chuỗi phiên
@@ -15,21 +16,21 @@ users:              # track A: quy mô khoá học
   source: "Cơ sở: lớp L3 hơn 700 học viên · cao: cả khoá hơn 1.000 học viên (README và 01-challenge-brief của bộ đề hackathon K5) · thấp: chỉ khoảng 300 người dùng thường xuyên (tự ước tính)"
 
 personas:           # ≥3 kiểu người dùng; share cộng lại = 1
-  - name: dung_it
-    share: 0.5
-    uses_per_month: 3       # cá nhân nộp lab rải rác, 2–4 lần soát / tháng
+  - name: nop_it            # câu 2: "1–3 lần" + "4–8 lần" = 4/24
+    share: 0.17
+    uses_per_month: 9       # điểm giữa 1–8 ≈ 4,5 lần / 14 ngày × 2
     turns_per_session: 1
-    source: "(tự ước tính) theo docs/track-a6-brief.md — thay bằng khảo sát câu 2"
-  - name: dung_vua
-    share: 0.35
-    uses_per_month: 10      # nộp đủ lab GĐ1, soát trước khi sửa + soát lại trước khi nộp
+    source: "khảo sát n = 25, câu 2: 4/24 nộp 1–8 lần / 14 ngày · số lượt (tự ước tính)"
+  - name: nop_vua           # câu 2: "9–12 lần" = 4/24
+    share: 0.17
+    uses_per_month: 21      # điểm giữa 9–12 ≈ 10,5 lần / 14 ngày × 2
     turns_per_session: 2
-    source: "(tự ước tính) theo docs/track-a6-brief.md — thay bằng khảo sát câu 2"
-  - name: dung_nhieu
-    share: 0.15
-    uses_per_month: 18      # nhóm làm đồ án / hackathon sát deadline, soát qua nhiều checkpoint
-    turns_per_session: 3
-    source: "(tự ước tính) theo docs/track-a6-brief.md — thay bằng khảo sát câu 2 và phỏng vấn"
+    source: "khảo sát n = 25, câu 2: 4/24 nộp 9–12 lần / 14 ngày · số lượt (tự ước tính)"
+  - name: nop_nhieu         # câu 2: "Trên 12 lần" = 16/24
+    share: 0.66
+    uses_per_month: 26      # cận dưới 13 lần / 14 ngày × 2 (thực tế có thể cao hơn)
+    turns_per_session: 2
+    source: "khảo sát n = 25, câu 2: 16/24 nộp trên 12 lần / 14 ngày · số lượt (tự ước tính)"
 # Mỗi lượt lấy ngẫu nhiên một đầu vào trong eval/benchmark.csv (type thuong và kho).
 
 prices:             # USD / 1 triệu token — từ further-reading/model-prices.md của repo đề (BTC tra 25/11/2026). ≥2 mức model

@@ -7,61 +7,72 @@
 
 | Nguồn | Đạt ngưỡng? | File |
 |---|---|---|
-| Đào data (x/N, %, cách đếm chạy lại được, ≥5 ví dụ) | ☑ | `evidence/data-mining.md` |
-| Phỏng vấn (≥3 người ngoài nhóm, đúng người dùng) | ☐ | `evidence/interviews/P1.md`… |
-| Khảo sát (≥20 người ngoài nhóm, đúng người dùng) | ☐ *(đang thu: 6/20)* | `evidence/survey/results.csv` |
+| Đào data (x/N, %, cách đếm chạy lại được, ≥5 ví dụ) | ☑ | `evidence/data-mining.md`, `evidence/mine_repos.py` |
+| Khảo sát (≥20 người ngoài nhóm, đúng người dùng) | ☑ **n = 25** học viên đã nộp bài (chốt lúc 19:20 27/11) | `evidence/survey/results.csv`, `evidence/survey/tally.py` |
+| Phỏng vấn (≥3 người ngoài nhóm, đúng người dùng) | ☐ 3 trao đổi ngắn với học viên (P1–P3): hỏi lại câu của form, trả lời trùng form, không có thông tin mới · 1 buổi lab coach (P4, không theo Mom Test) → không tính là nguồn đạt ngưỡng riêng | `evidence/interviews/P1.md`…`P4.md` |
 
 ## 2. Số chính
 
-- **Đào data** (`evidence/data-mining.md`, N = 135 repo CP1 ngày 27/11/2026): **18/135 (13%)** repo thiếu hoặc chưa qua `check_teams()` của BTC; **15/135 (11%)** repo có `canvas.md` chưa đủ 7 dòng / trống / thiếu; **6/135 (4%)** repo có chữ "AI" trong dòng pain (lỗi mà `python run.py check` không bắt được).
-- **Phỏng vấn:** __/3 học viên ngoài nhóm + __/2 lab coach *(đang triển khai chiều/tối 27/11)*.
-- **Khảo sát** *(bản tạm tính lúc 18:10 ngày 27/11, n = 6 — chưa đủ ngưỡng ≥20, không ghi % theo quy tắc n nhỏ)*:
-  - Đối tượng: 4/6 học viên L3B, 2/6 học viên L3A.
-  - Tần suất nộp 14 ngày qua: 3/6 trên 12 lần, 2/6 (9–12 lần), 1/6 (4–8 lần).
-  - Thời gian tự rà mỗi lần: **5/6 mất 5–15 phút**, 1/6 dưới 5 phút.
-  - Cách soát hiện tại: 4/6 tự đọc bằng mắt, **4/6 dán vào AI bên ngoài**, 3/6 chạy script check, 1/6 nhờ bạn đọc chéo.
-  - Sự cố đã gặp & phát hiện sát giờ/sau nộp (**4/6 người gặp ≥1 lỗi** — trong đó 3/6 gặp 2–3 lần, 1/6 gặp 1 lần): **3/6** fork bài về nhưng tạo PR/push nhầm lên repo gốc; **3/6** nộp sót file / thiếu mục / sai format; **1/6** số liệu lệch / thiếu nguồn giữa các file; **1/6** lúng túng khi bị hỏi vặn. Đáng chú ý: **2/4** người đã dán bài vào AI bên ngoài (`R01`, `R05`) vẫn gặp lỗi lệch nguồn / PR nhầm repo gốc / lúng túng khi bị hỏi vặn.
+Chạy lại: `python evidence/survey/tally.py`. Khảo sát mở 17:31, 28 phiếu: 26 học viên + 2 lab coach. Bỏ 1 học viên chưa nộp lần nào → **n = 25** (L3B 20, L3A 5).
 
-Phỏng vấn nhiều vai thì đếm theo từng vai, không cộng chung.
+- **Đào data** (N = 135 repo sau CP1): **18/135 (13%)** repo thiếu hoặc chưa qua `check_teams()` của BTC · **6/135 (4%)** có chữ "AI" ở dòng pain, lỗi mà `run.py check` không bắt.
+- **Khảo sát học viên** (n = 25):
+  - Nộp nhiều: **16/25 (64%)** nộp trên 12 lần / 14 ngày.
+  - Phát hiện lỗi sát giờ / sau khi nộp ≥1 lần trong 14 ngày: **20/25 (80%)**; 2–3 lần: 13/25 (52%).
+  - Sự cố đã gặp (chọn nhiều): **PR / push nhầm repo gốc 13/25 (52%)** · nộp sót file / sai format 9/25 (36%) · lúng túng khi bị hỏi vặn 6/25 (24%) · lệch số / thiếu nguồn 3/25 (12%) · lộ key / .env 3/25 (12%) · sửa gấp / bị trừ điểm 2/25 (8%) · chưa gặp gì 6/25 (24%).
+  - Thời gian tự rà lần gần nhất: dưới 5 phút 9/25 · 5–15 phút 10/25 · 16–30 phút 5/25 · trên 30 phút 1/25.
+  - Cách soát: chạy script check 16/25 (64%) · **dán vào AI ngoài 15/25 (60%)** · đọc bằng mắt 10/25 (40%) · nhờ đọc chéo 6/25 (24%).
+- **Khảo sát lab coach** (n = 2, không ghi %): cả 2 soát dưới 10 bài / 14 ngày, mất 15–30 phút mỗi đợt chỉ để rà lỗi format · lỗi lặp lại: 2/2 sót file / sai format, 1/2 PR nhầm repo gốc, 1/2 lộ API key · câu "lỗi script không bắt được": cả 2 bỏ trống.
 
 | | Vai | Gặp pain? | Số lần / 1 tháng qua | Lần gần nhất mất | Đang xoay xở bằng |
 |---|---|---|---|---|---|
-| P1 | | | | | |
-| P2 | | | | | |
-| P3 | | | | | |
+| P1 | Học viên L3 | Trả lời trùng form, không có chuyện mới | không ghi lại | không ghi lại | không ghi lại |
+| P2 | Học viên L3 | Trả lời trùng form, không có chuyện mới | không ghi lại | không ghi lại | không ghi lại |
+| P3 | Học viên L3 | Trả lời trùng form, không có chuyện mới | không ghi lại | không ghi lại | không ghi lại |
+| P4 | Lab coach | Không hỏi theo Mom Test, xem `P4.md` | phiếu: dưới 10 bài / 14 ngày | phiếu: 15–30 phút / đợt | đọc tay |
 
-## 3. ≥5 trích dẫn hoặc ví dụ nguyên văn (có nguồn, bỏ tên)
+## 3. ≥5 trích dẫn nguyên văn (câu 7 khảo sát, giữ nguyên chính tả, bỏ tên)
 
-*(Hiện có 3/5 trích dẫn từ khảo sát — tiếp tục bổ sung từ phỏng vấn và các phiếu khảo sát mới trước CP3)*
-
-1. `"phải xem lại xem đủ bài chưa"` — phiếu khảo sát `R03` (Học viên lớp L3A)
-2. `"kiểm tra xem có ghi API không"` — phiếu khảo sát `R05` (Học viên lớp L3B)
-3. `"thiếu một số file của thành viên nên cần liên hệ để vổ sung"` — phiếu khảo sát `R06` (Học viên lớp L3B)
-4.
-5.
+1. "phải xem lại xem đủ bài chưa" — phiếu `R03` (L3A)
+2. "kiểm tra xem có ghi API không" — phiếu `R05` (L3B)
+3. "thiếu một số file của thành viên nên cần liên hệ để vổ sung" — phiếu `R06` (L3B)
+4. "Kiểm tra những file cần có trong repo github, nhất là các file báo cáo và bằng chứng" — phiếu `R18` (L3B)
+5. "Quá nhiều file đã thay đổi và không biết nên push file nào" — phiếu `R22` (L3A)
+6. "Không biết là tất cả đầu việc đã hoàn thành 100% chưa" — phiếu `R25` (L3A)
+7. "Soát lại yêu cầu đề bài" — phiếu `R23` (L3B)
 
 ## 4. Các nguồn có khớp nhau không
 
-- **Khớp:** Đào data trên 135 repo cho thấy **18/135 (13%)** repo vẫn lỗi/thiếu `TEAMS.md` dù khung đã có sẵn lệnh `python run.py check`; khảo sát tạm tính cũng ghi nhận **3/6** người gặp lỗi nộp sót file / sai format dù **3/6** có chạy script check và **4/6** tự rà mắt/dán AI ngoài.
-- **Bổ sung insight mới từ khảo sát:** Nỗi đau lớn ngoài phạm vi của `run.py check` là **3/6** người từng **fork bài về nhưng tạo PR / push nhầm lên repo gốc** của khoá, cùng với lo ngại rà lộ API key (`R05`), thiếu file thành viên (`R06`), lệch số liệu giữa các file (`R01`) và lúng túng khi bị hỏi vặn (`R05`).
+- **Khớp:** đào data thấy 13% repo vẫn lỗi `TEAMS.md` dù có sẵn `run.py check`. Khảo sát thấy **13/16 người có chạy script check vẫn gặp ≥1 sự cố**, 9/25 nộp sót file / sai format, và 2/2 lab coach nêu lỗi này đầu tiên.
+- **Chưa đủ để thay cho AI ngoài (trả lời câu hỏi "khác gì agent có sẵn?"):** trong 15 người đã dán bài vào AI ngoài, **11/15 vẫn gặp sự cố** và **6/15 vẫn PR / push nhầm repo gốc**. Lỗi PR nhầm nằm ở **trạng thái git / GitHub** (remote, đích của PR), không nằm trong phần bài được dán vào chat. Script check cũng không kiểm lỗi này.
+- **Lệch:** đào data chỉ đo được lỗi format ở CP1, chưa đo được PR nhầm repo gốc. Có thể đếm thêm bằng cách đếm PR học viên mở nhầm vào repo gốc của khoá (cách đếm viết trước, chạy sau).
 
 ## 5. Kết luận
 
-Giả thuyết ở `evidence/hypothesis.md`: **đang đi đúng hướng (chưa chốt đến khi khảo sát n ≥ 20 và phỏng vấn ≥3)**. Ghi nhận thêm: lỗi đặc thù *fork/PR nhầm repo gốc* xuất hiện tới 3/6 người trong lô phản hồi đầu; cần phỏng vấn trực tiếp Lab Coach và đủ ≥20 phiếu khảo sát để chốt ngưỡng giả thuyết ở CP3.
+Giả thuyết ở `evidence/hypothesis.md` (≥60% n ≥ 20 từng nộp sót mục / thiếu nguồn / sai tiêu chí hoặc mất ≥15 phút dò):
+- **Đúng chữ giả thuyết: 15/25 (60%), vừa chạm ngưỡng.** Tính cả các sự cố khác ở câu 5 (PR nhầm, lộ key, lúng túng khi bị hỏi vặn): 21/25 (84%). Luật đếm hai bản này được viết lúc tổng hợp (sau khi thu phiếu), ghi rõ trong `tally.py`.
+- **Vế 2 (≥2/3 người phỏng vấn kể được lỗi script không bắt): chưa kiểm được.** 3 trao đổi ngắn với học viên (P1–P3) chỉ lặp lại câu của form, không ai kể lỗi script không bắt; 2 lab coach bỏ trống câu C4.
+- **Phải đổi trọng tâm:** pain lớn nhất là **PR / push nhầm repo gốc (52%)**, không phải dò rubric (chỉ 6/25 mất ≥16 phút). Trọng tâm nên là: kiểm trạng thái repo thật (đích PR, file .env, đủ file) bằng code, sau đó AI hỏi vặn.
 
-## Tiến độ (dùng cho CP2)
+**Điều vẫn chưa biết:**
+- Có thành viên nhóm nào điền phiếu không (form ẩn danh).
+- Học viên mất bao lâu để sửa sau khi PR nhầm.
+- Hậu quả có phải mất điểm thật không: chỉ 2/25 nói bị trừ điểm hoặc phải sửa gấp.
+
+## Tiến độ
 
 | Nguồn | Kế hoạch | Đã làm đến đâu |
 |---|---|---|
-| Đào data (đạt ngưỡng) | Kiểm repo GitHub công khai `K5-Day15-L3*` sau CP1 | **Đã xong lần 1 (17:20):** N = 135 repo · chi tiết ở `evidence/data-mining.md` và `evidence/mine_repos.py` |
-| Khảo sát (nguồn kiểm chéo chính) | ≥20 học viên L3 ngoài nhóm · bộ câu `evidence/survey/questions.md` | Đã mở lúc 17:31 qua link `https://forms.gle/amwVjGJB1xXrezYFA` · **đang có 6/20 phiếu** (`R01`–`R06`) |
-| Phỏng vấn (nguồn kiểm lại) | ≥3 học viên ngoài nhóm + 1–2 lab coach · kịch bản `evidence/interviews/GUIDE.md` | Đang tiến hành (0/3 HV · có 1 người trả lời `R05` đồng ý hẹn) |
+| Đào data | Repo `K5-Day15-L3*` sau CP1 | Xong lần 1 (17:20), N = 135 · chạy lại sau CP3 |
+| Khảo sát | ≥20 học viên L3 ngoài nhóm | **Đạt: n = 25** (chốt 19:20 27/11) |
+| Phỏng vấn | ≥3 học viên ngoài nhóm + 1–2 lab coach | Xong: 3 học viên (P1–P3, trùng form, không có thông tin mới) + 1 lab coach (P4). Chưa đạt ngưỡng vì thiếu số và trích dẫn riêng |
 
-## Lịch hẹn (dùng cho CP2 — chỉ ghi vai và giờ, không tên)
+## Lịch hẹn (chỉ ghi vai và giờ, không tên)
 
 | Vai | Giờ hẹn | Đã xong? |
 |---|---|---|
-| Học viên L3B ngoài nhóm (`R05` — P1) | Tối 27/11 (liên hệ qua thông tin Câu 8 giữ ngoại tuyến) | ☐ |
-| Học viên L3B ngoài nhóm (P2) | __ | ☐ |
-| Học viên L3 ngoài nhóm (P3) | __ | ☐ |
-| Lab coach (P4) | trước 19:30 hôm nay tại C401 | ☐ |
+| Học viên L3 ngoài nhóm (P1) | chiều 27/11 tại lớp | ☑ `P1.md` (trùng form) |
+| Học viên L3 ngoài nhóm (P2) | chiều 27/11 tại lớp | ☑ `P2.md` (trùng form) |
+| Học viên L3 ngoài nhóm (P3) | chiều 27/11 tại lớp | ☑ `P3.md` (trùng form) |
+| Lab coach (P4) | chiều 27/11 tại C401 | ☑ `P4.md` |
+| Người trả lời phiếu đồng ý hỏi thêm | 3/25 phiếu đồng ý | ☐ |
