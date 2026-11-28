@@ -481,23 +481,23 @@ class TestLocalE2EFlows(unittest.TestCase):
             page.mouse.click(5, 5)
             page.wait_for_selector("dialog.cite-dialog[open]", state="detached", timeout=5000)
 
-            # Viva tab: Ask -> Defense -> Save
-            page.get_by_role("tab", name="Vấn đáp Bloom").click()
-            page.get_by_role("button", name="Hỏi vặn").click()
-            page.locator(".masked-hint").wait_for(state="visible", timeout=10000)
+            # Viva chat tab: Start -> Answer -> Save
+            page.get_by_role("tab", name="Vấn đáp", exact=True).click()
+            page.get_by_role("button", name="Bắt đầu kiểm tra kiến thức").click()
+            page.locator("strong:has-text('Câu hỏi phản biện')").first.wait_for(state="visible", timeout=10000)
             page.fill("#viva-answer-box", "Vì meta.json:L02 trỏ pr_target upstream nên dễ lộ bài sang repo gốc.")
-            page.get_by_role("button", name="Nộp bài").click()
-            page.locator(".feedback-box").wait_for(state="visible", timeout=10000)
-            page.get_by_role("button", name="Lưu hồ sơ").click()
-            page.locator("text=Đã lưu chẩn đoán Bloom").wait_for(state="visible", timeout=10000)
+            page.get_by_role("button", name="Gửi trả lời").click()
+            page.locator(".feedback-box").first.wait_for(state="visible", timeout=10000)
+            page.get_by_role("button", name="Lưu vào Hệ thống kiến thức").click()
+            page.locator("text=Đã lưu kiến thức & mức Bloom").wait_for(state="visible", timeout=10000)
 
-            # Export tab: verify 4 format buttons & preview
-            page.get_by_role("tab", name="Xuất file").click()
+            # Knowledge Hub tab: verify 4 export-all format buttons & preview
+            page.get_by_role("tab", name="Hệ thống kiến thức").click()
             for btn_label in ("Anki (.tsv)", "Markdown (.md)", "Etude (.pack.json)", "JSON (.json)"):
                 page.get_by_role("button", name=btn_label).click()
-            page.locator("summary:has-text('Xem trước')").click()
+            page.locator("summary:has-text('Xem trước file xuất')").click()
             preview_txt = page.locator("pre.code-preview").inner_text()
-            self.assertIn("scan_session", preview_txt)
+            self.assertIn('"scope": "all"', preview_txt)
 
             browser.close()
 

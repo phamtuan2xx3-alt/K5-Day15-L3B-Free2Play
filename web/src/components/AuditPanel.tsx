@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, HelpCircle, ShieldAlert, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, HelpCircle, MessageSquare, ShieldAlert, X } from "lucide-react";
 import { InlineMarkdown, MarkdownView } from "@/components/MarkdownView.tsx";
 import { Alert } from "@/components/ui/alert.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -12,11 +12,13 @@ import type {
   ScanSessionDetail,
   ScanStreamState,
 } from "@/types.ts";
+import { parseAuditReport, type VivaStarterQuestion } from "@/utils/auditSections.ts";
 
 interface AuditPanelProps {
   session: ScanSessionDetail;
   diff: ScanDiffSummary | null;
   onSelectCite: (file: string, line: number) => void;
+  onGoToViva?: (starters: VivaStarterQuestion[]) => void;
 }
 
 const DEFAULT_CHECK_KEYS: Array<{ key: string; title: string; desc: string }> = [
@@ -138,7 +140,7 @@ function HardFlagsSection({
             return (
               <li
                 key={`${flag.rule_id}-${flag.file}-${idx}`}
-                className="rounded-lg border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-3.5 py-2.5 text-sm"
+                className="rounded-lg border border-destructive/35 bg-destructive/5 px-3.5 py-2.5 text-sm"
               >
                 <div className="mb-1 flex flex-wrap items-center gap-2">
                   <Badge variant="destructive">{flag.rule_id}</Badge>
@@ -211,7 +213,7 @@ export function ScanStreamPanel({
   const checks = preflight ? normalizeChecks(preflight.checks, preflight.source_type) : [];
 
   return (
-    <div className="tabpanel-inner space-y-5" aria-live="polite">
+    <div className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-5" aria-live="polite">
       {/* Live Timeline Bar */}
       <Card className="bg-card shadow-none border-primary/35">
         <CardContent className="p-4 space-y-3">
@@ -328,7 +330,7 @@ export function ScanStreamPanel({
           <span>Báo cáo đối chiếu Rubric</span>
           <Badge variant="default">Đang stream</Badge>
         </h3>
-        <div className="rounded-lg border border-border bg-card p-4 sm:p-5 max-w-[78ch]">
+        <div className="w-full rounded-lg border border-border bg-card p-4 sm:p-5">
           {stream.contentText ? (
             <MarkdownView text={stream.contentText} />
           ) : (
@@ -344,11 +346,21 @@ export function ScanStreamPanel({
   );
 }
 
-export function AuditPanel({ session, diff, onSelectCite }: AuditPanelProps) {
+type AuditSubTab = "sec1" | "sec2" | "sec3" | "all";
+
+export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPanelProps) {
   const checks = normalizeChecks(session.checks, session.source_type);
+  const parsed = useMemo(() => parseAuditReport(session.audit_output), [session.audit_output]);
+  const [subTab, setSubTab] = useState<AuditSubTab>("sec1");
+
+  useEffect(() => {
+    setSubTab("sec1");
+  }, [session.scan_id]);
+
+  const safetyCount = (session.hard_flags?.length ?? 0) + (session.missing_required?.length ?? 0);
 
   return (
-    <div className="tabpanel-inner space-y-5">
+    <div className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -389,31 +401,147 @@ export function AuditPanel({ session, diff, onSelectCite }: AuditPanelProps) {
       {/* 4 GitHub Live Guard status cards */}
       <ChecksGrid checks={checks} onSelectCite={onSelectCite} />
 
-      {/* Missing required files (HAX G10) */}
-      {session.missing_required && session.missing_required.length > 0 ? (
-        <Alert variant="info" role="status">
-          <strong>HAX G10 — Thiếu file bắt buộc:</strong>{" "}
-          {session.missing_required.map((fname, idx) => (
-            <span key={fname}>
-              {idx > 0 ? ", " : ""}
-              <code className="font-mono text-xs">{fname}</code>
-            </span>
-          ))}
-        </Alert>
-      ) : null}
+      {/* Segmented Sub-tabs for easier scanning */}
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-border pb-3"
+        role="group"
+        aria-label="Phân mục báo cáo kiểm toán"
+      >
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 inline-flex items-center gap-1.5"
+          variant={subTab === "sec1" ? "default" : "secondary"}
+          onClick={() => setSubTab("sec1")}
+        >
+          <span>(1) Lỗi cứng &amp; An toàn</span>
+          {safetyCount > 0 ? (
+            <Badge
+              variant={subTab === "sec1" ? "default" : "destructive"}
+              className={
+                subTab === "sec1"
+                  ? "px-1.5 py-0 text-[11px] leading-4 bg-primary-foreground/20 text-primary-foreground border-transparent"
+                  : "px-1.5 py-0 text-[11px] leading-4"
+              }
+            >
+              {safetyCount}
+            </Badge>
+          ) : null}
+        </Button>
 
-      {/* Hard flags */}
-      <HardFlagsSection hardFlags={session.hard_flags} onSelectCite={onSelectCite} />
+        <Button
+          type="button"
+          size="sm"
+          className="h-8"
+          variant={subTab === "sec2" ? "default" : "secondary"}
+          onClick={() => setSubTab("sec2")}
+        >
+          (2) Đối chiếu &amp; Lập luận
+        </Button>
 
-      {/* AI Audit Report with safe MarkdownView */}
+        <Button
+          type="button"
+          size="sm"
+          className="h-8"
+          variant={subTab === "sec3" ? "default" : "secondary"}
+          onClick={() => setSubTab("sec3")}
+        >
+          (3) Đạt / Chưa kiểm (G10)
+        </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          className="h-8"
+          variant={subTab === "all" ? "default" : "outline"}
+          onClick={() => setSubTab("all")}
+        >
+          Xem toàn bộ
+        </Button>
+      </div>
+
+      {/* Sub-tab 1 or All: Missing required + Hard flags */}
+      {(subTab === "sec1" || subTab === "all") && (
+        <div className="space-y-4">
+          {session.missing_required && session.missing_required.length > 0 ? (
+            <Alert variant="info" role="status">
+              <strong>HAX G10 — Thiếu file bắt buộc:</strong>{" "}
+              {session.missing_required.map((fname, idx) => (
+                <span key={fname}>
+                  {idx > 0 ? ", " : ""}
+                  <code className="font-mono text-xs">{fname}</code>
+                </span>
+              ))}
+            </Alert>
+          ) : null}
+
+          <HardFlagsSection hardFlags={session.hard_flags} onSelectCite={onSelectCite} />
+        </div>
+      )}
+
+      {/* AI Audit Section Content */}
       <section aria-labelledby="ai-audit-heading" className="space-y-2.5">
         <h3 id="ai-audit-heading" className="m-0 text-sm font-semibold text-foreground">
-          Báo cáo đối chiếu Rubric
+          {subTab === "sec1"
+            ? "Phân tích lỗi cứng & an toàn"
+            : subTab === "sec2"
+              ? "Đối chiếu chéo bằng chứng & quy định repo"
+              : subTab === "sec3"
+                ? "Tổng hợp hạng mục Đạt / Chưa kiểm (G10)"
+                : "Báo cáo đối chiếu Rubric đầy đủ"}
         </h3>
-        <div className="rounded-lg border border-border bg-card p-4 sm:p-5 max-w-[78ch]">
-          <MarkdownView text={session.audit_output} onSelectCite={onSelectCite} />
+        <div className="w-full rounded-lg border border-border bg-card p-4 sm:p-5">
+          {subTab === "sec1" ? (
+            parsed.section1 ? (
+              <MarkdownView text={parsed.section1} onSelectCite={onSelectCite} />
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">Không có ghi chú thêm ở mục (1).</p>
+            )
+          ) : subTab === "sec2" ? (
+            parsed.section2 ? (
+              <MarkdownView text={parsed.section2} onSelectCite={onSelectCite} />
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">
+                Chưa tách được mục (2) từ báo cáo này — bạn có thể bấm <strong>Xem toàn bộ</strong>.
+              </p>
+            )
+          ) : subTab === "sec3" ? (
+            parsed.section3 ? (
+              <MarkdownView text={parsed.section3} onSelectCite={onSelectCite} />
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">
+                Chưa tách được mục (3) từ báo cáo này — bạn có thể bấm <strong>Xem toàn bộ</strong>.
+              </p>
+            )
+          ) : (
+            <MarkdownView text={parsed.fullWithoutViva || session.audit_output} onSelectCite={onSelectCite} />
+          )}
         </div>
       </section>
+
+      {/* Redirect CTA to Tab 2 (Viva) instead of dumping Section (4) inline */}
+      {onGoToViva ? (
+        <Card className="bg-muted/35 shadow-none">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="space-y-0.5">
+              <strong className="block text-sm text-foreground">
+                {parsed.vivaQuestions.length > 0
+                  ? `Có ${parsed.vivaQuestions.length} câu hỏi vặn phản biện từ lần soi này`
+                  : "Luyện vấn đáp phản biện & chấm mức hiểu Bloom L0–L6"}
+              </strong>
+              <p className="m-0 text-xs text-muted-foreground">
+                Câu hỏi phản biện đã được chuyển sang tab Vấn đáp để bạn trả lời từng câu và nâng bậc kiến thức.
+              </p>
+            </div>
+            <Button type="button" onClick={() => onGoToViva(parsed.vivaQuestions)}>
+              <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
+              {parsed.vivaQuestions.length > 0
+                ? `Chuyển sang Vấn đáp (${parsed.vivaQuestions.length} câu gợi ý)`
+                : "Chuyển sang Vấn đáp"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

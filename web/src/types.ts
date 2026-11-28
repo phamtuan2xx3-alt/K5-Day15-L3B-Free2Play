@@ -166,6 +166,9 @@ export interface BloomHistoryItem {
 
 export interface BloomConcept {
   concept_key: string;
+  member_slug?: string;
+  source_repo?: string;
+  source_scan_id?: string;
   term?: string;
   tag?: string;
   source_cite?: string;
@@ -182,6 +185,35 @@ export interface BloomConcept {
   status: CardStatus;
   history?: BloomHistoryItem[];
   updated_at?: string;
+}
+
+export interface AllKnowledgeResponse {
+  owner_user_id?: string;
+  member_slug?: string;
+  repos?: string[];
+  concepts: BloomConcept[];
+}
+
+export type VivaChatMode = "start" | "next" | "answer" | "tutor";
+
+export interface VivaChatHistoryItem {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface VivaChatResponse {
+  entry_id?: number;
+  mode: VivaChatMode | string;
+  reply_text: string;
+  question?: string;
+  concept_key?: string;
+  term?: string;
+  tag?: string;
+  source_cite?: string;
+  viva_meta_token?: string;
+  bloom_level?: number | null;
+  bloom_label?: string;
+  draft?: BloomDraft | null;
 }
 
 export interface MemberProfileResponse {

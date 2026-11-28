@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { RefreshCw, Search } from "lucide-react";
+import { BrandWordmark } from "@/components/ScanSidebar.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import type { SubmissionOption } from "@/types.ts";
@@ -51,8 +52,8 @@ export function TopBar({
             onNavigate("/");
           }}
         >
-          <img src="/repoksv-logo-120.png" alt="" className="brand-logo" width={30} height={30} />
-          <span className="text-sm font-bold tracking-tight">RepoKSV</span>
+          <img src="/repoksv-logo-120.png" alt="" className="brand-logo" width={32} height={32} />
+          <BrandWordmark />
         </a>
 
         <form

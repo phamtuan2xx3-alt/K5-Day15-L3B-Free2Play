@@ -223,6 +223,11 @@ class RepoKsvDB:
         with self._write_lock:
             conn = self._get_conn()
             conn.executescript(SCHEMA_SQL)
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(bloom_profiles)").fetchall()}
+            if "source_repo" not in cols:
+                conn.execute("ALTER TABLE bloom_profiles ADD COLUMN source_repo TEXT NOT NULL DEFAULT ''")
+            if "source_scan_id" not in cols:
+                conn.execute("ALTER TABLE bloom_profiles ADD COLUMN source_scan_id TEXT NOT NULL DEFAULT ''")
             conn.commit()
 
     def close_thread(self) -> None:
@@ -611,6 +616,7 @@ class RepoKsvDB:
         return [self._row_to_viva_entry(r) for r in rows]
 
     def _row_to_bloom_item(self, row: sqlite3.Row) -> dict[str, Any]:
+        keys = set(row.keys())
         return {
             "owner_user_id": row["owner_user_id"],
             "member_slug": row["member_slug"],
@@ -618,6 +624,8 @@ class RepoKsvDB:
             "term": row["term"],
             "tag": row["tag"],
             "source_cite": row["source_cite"],
+            "source_repo": row["source_repo"] if "source_repo" in keys else "",
+            "source_scan_id": row["source_scan_id"] if "source_scan_id" in keys else "",
             "bloom_level": row["bloom_level"],
             "highest_bloom_level": row["highest_bloom_level"],
             "understood_points": _json_loads(row["understood_json"], []),
@@ -643,6 +651,8 @@ class RepoKsvDB:
         member_slug: str | None = None,
         question: str = "",
         updated_at: str | None = None,
+        scan_id: str | None = None,
+        source_repo: str = "",
     ) -> dict[str, Any]:
         """Xác nhận bản nháp Bloom (HITL) và hợp nhất vào bloom_profiles của user."""
         now = updated_at or _now_iso()
@@ -783,10 +793,21 @@ class RepoKsvDB:
                 else:
                     status = "needs_review"
 
+                resolved_scan_id = (entry_scan_id or scan_id or str(effective_draft.get("source_scan_id") or "")).strip()
+                resolved_source_repo = (source_repo or str(effective_draft.get("source_repo") or "")).strip()
+                if not resolved_source_repo and resolved_scan_id:
+                    s_row = conn.execute(
+                        "SELECT source_label FROM scan_sessions WHERE scan_id = ? AND owner_user_id = ?",
+                        (resolved_scan_id, owner_user_id),
+                    ).fetchone()
+                    if s_row is not None:
+                        resolved_source_repo = str(s_row["source_label"] or "")
+
                 history.append({
                     "bloom_level": new_level,
                     "timestamp": now,
-                    "scan_id": entry_scan_id,
+                    "scan_id": resolved_scan_id or entry_scan_id,
+                    "source_repo": resolved_source_repo,
                     "viva_entry_id": viva_entry_id,
                     "resolved_count": len(resolved_misconceptions),
                 })
@@ -795,14 +816,17 @@ class RepoKsvDB:
                     """
                     INSERT INTO bloom_profiles (
                         owner_user_id, member_slug, concept_key, term, tag, source_cite,
+                        source_repo, source_scan_id,
                         bloom_level, highest_bloom_level, understood_json, missing_json,
                         misconceptions_json, resolved_misconceptions_json, next_probe,
                         prompt, reference, rubric, status, history_json, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(owner_user_id, member_slug, concept_key) DO UPDATE SET
                         term = excluded.term,
                         tag = excluded.tag,
                         source_cite = excluded.source_cite,
+                        source_repo = CASE WHEN excluded.source_repo != '' THEN excluded.source_repo ELSE bloom_profiles.source_repo END,
+                        source_scan_id = CASE WHEN excluded.source_scan_id != '' THEN excluded.source_scan_id ELSE bloom_profiles.source_scan_id END,
                         bloom_level = excluded.bloom_level,
                         highest_bloom_level = excluded.highest_bloom_level,
                         understood_json = excluded.understood_json,
@@ -824,6 +848,8 @@ class RepoKsvDB:
                         term,
                         tag,
                         source_cite,
+                        resolved_source_repo,
+                        resolved_scan_id,
                         new_level,
                         highest,
                         _json_dumps(understood),
@@ -922,6 +948,36 @@ class RepoKsvDB:
                 "misconception_count": misconception_count,
             },
         }
+
+    def list_all_bloom_concepts(self, owner_user_id: str) -> list[dict[str, Any]]:
+        """Lấy toàn bộ khái niệm Bloom mọi repo của tài khoản (tự khớp source_repo cho dữ liệu cũ)."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM bloom_profiles WHERE owner_user_id = ? ORDER BY bloom_level ASC, updated_at DESC",
+            (owner_user_id,),
+        ).fetchall()
+        concepts = [self._row_to_bloom_item(r) for r in rows]
+        scan_map = {
+            r["scan_id"]: r["source_label"]
+            for r in conn.execute(
+                "SELECT scan_id, source_label FROM scan_sessions WHERE owner_user_id = ?",
+                (owner_user_id,),
+            ).fetchall()
+        }
+        for item in concepts:
+            if not item.get("source_repo"):
+                cand_scan = item.get("source_scan_id") or ""
+                if not cand_scan and item.get("history"):
+                    last_hist = item["history"][-1]
+                    if isinstance(last_hist, dict):
+                        cand_scan = str(last_hist.get("scan_id") or "")
+                        if last_hist.get("source_repo"):
+                            item["source_repo"] = str(last_hist["source_repo"])
+                if not item.get("source_repo") and cand_scan and cand_scan in scan_map:
+                    item["source_repo"] = scan_map[cand_scan]
+                if not item.get("source_scan_id") and cand_scan:
+                    item["source_scan_id"] = cand_scan
+        return concepts
 
     def summarize_profile_for_prompt(
         self,

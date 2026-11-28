@@ -480,6 +480,23 @@ class VivaCoachRequest(BaseModel):
     goal: str | None = Field(default=None, max_length=500)
 
 
+class VivaChatRequest(BaseModel):
+    scan_id: str = Field(..., min_length=1, max_length=120)
+    member_name: str = Field(default="", max_length=120)
+    mode: str = Field(default="answer", max_length=24)
+    message: str = Field(default="", max_length=8000)
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=20)
+    active_concept: dict[str, Any] | None = None
+    viva_meta: dict[str, Any] | str | None = None
+
+    @field_validator("viva_meta")
+    @classmethod
+    def _validate_chat_viva_meta_len(cls, v: Any) -> Any:
+        if isinstance(v, str) and len(v) > 8192:
+            raise ValueError("viva_meta vượt quá 8192 ký tự.")
+        return v
+
+
 class ConfirmLogRequest(BaseModel):
     scan_id: str | None = Field(default=None, max_length=120)
     member_name: str = Field(default="", max_length=120)
@@ -492,6 +509,7 @@ class ConfirmLogRequest(BaseModel):
 class CardStatusRequest(BaseModel):
     scan_id: str | None = Field(default=None, max_length=120)
     member_name: str = Field(default="", max_length=120)
+    member_slug: str | None = Field(default=None, max_length=120)
     concept_key: str = Field(..., min_length=1, max_length=120)
     status: str = Field(..., min_length=1, max_length=40)
 
@@ -690,7 +708,8 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         if anon_payload and anon_payload.get("anon_id"):
             anon_id = str(anon_payload["anon_id"])
         else:
-            anon_id = secrets.token_hex(12)
+            preset_local = re.sub(r"[^A-Za-z0-9_-]", "", (os.environ.get("LOCAL_DEMO_ANON_ID") or "").strip())
+            anon_id = preset_local or secrets.token_hex(12)
             if response is not None:
                 signed_anon = sign_token({"anon_id": anon_id}, ttl_seconds=SESSION_TTL_S, typ="anon")
                 response.set_cookie(
@@ -1051,6 +1070,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                 identity,
                 repo_profile,
                 base_warnings=list(snap.get("g10_warnings") or []),
+                checks=snap.get("checks"),
             )
 
             tracing.begin("api_scan_github")
@@ -1061,6 +1081,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                     hard_flags,
                     numbered_contents,
                     extra_notes="\n".join(f"- {n}" for n in notes_list if n),
+                    repo_profile=repo_profile,
                 )
             finally:
                 trace_summary, _ = tracing.end()
@@ -1231,6 +1252,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                     identity,
                     repo_profile,
                     base_warnings=list(snap.get("g10_warnings") or []),
+                    checks=snap.get("checks"),
                 )
                 emit("stage", {"step": "ai", "label": "Giám khảo AI đang phân tích & đối chiếu chéo rubric..."})
 
@@ -1242,6 +1264,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                         hard_flags,
                         numbered_contents,
                         extra_notes="\n".join(f"- {n}" for n in notes_list if n),
+                        repo_profile=repo_profile,
                         on_delta=_on_delta,
                     )
                 finally:
@@ -1661,6 +1684,230 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
 
         return await _make_sse_response(request, cookie_carrier, _worker)
 
+    def _decode_chat_concept(req: VivaChatRequest) -> dict[str, Any]:
+        concept = _decode_viva_meta(req.viva_meta)
+        if not concept and isinstance(req.viva_meta, dict):
+            concept = dict(req.viva_meta)
+        if isinstance(req.active_concept, dict):
+            for k, v in req.active_concept.items():
+                if v is not None and (k not in concept or not concept.get(k)):
+                    concept[k] = v
+        return concept
+
+    def _finalize_viva_chat(
+        session: dict[str, Any],
+        req: VivaChatRequest,
+        res: dict[str, Any],
+        concept_ctx: dict[str, Any],
+    ) -> dict[str, Any]:
+        norm_mode = str(res.get("mode") or req.mode or "answer").lower()
+        resolved_member = str(res.get("member_name") or req.member_name or "Thành viên")
+        if norm_mode in {"start", "next"}:
+            cards = res.get("cards") or []
+            first = cards[0] if cards else (res.get("viva_meta") or {})
+            question_txt = str(first.get("question") or res.get("question") or _strip_hidden_blocks(res.get("output", "")))
+            hidden_meta = {
+                "concept_key": first.get("concept_key", "viva-card-1"),
+                "term": first.get("term", ""),
+                "tag": first.get("tag", "khai_niem"),
+                "source_cite": first.get("source_cite") or first.get("file_ref", ""),
+                "reference": first.get("reference", ""),
+                "rubric": first.get("rubric", ""),
+                "common_misconceptions": first.get("common_misconceptions", []),
+                "question": question_txt,
+            }
+            tok = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S, typ="viva_meta")
+            entry = store.save_viva_entry(
+                session["scan_id"],
+                resolved_member,
+                "ask",
+                concept_key=str(hidden_meta["concept_key"]),
+                question=question_txt,
+                ai_feedback=question_txt,
+                draft=hidden_meta,
+                saved_by_user=0,
+            )
+            return {
+                "entry_id": entry["id"],
+                "mode": norm_mode,
+                "reply_text": question_txt,
+                "question": question_txt,
+                "concept_key": hidden_meta["concept_key"],
+                "term": hidden_meta["term"],
+                "tag": hidden_meta["tag"],
+                "source_cite": hidden_meta["source_cite"],
+                "viva_meta_token": tok,
+                "bloom_level": None,
+                "bloom_label": "",
+                "draft": None,
+            }
+
+        if norm_mode == "tutor":
+            reply_text = _strip_hidden_blocks(str(res.get("reply_text") or res.get("output") or ""))
+            next_q = str(res.get("question") or concept_ctx.get("question") or reply_text)
+            hidden_meta = {
+                "concept_key": concept_ctx.get("concept_key") or "viva-tutor",
+                "term": concept_ctx.get("term") or "Nâng +1 Bloom",
+                "tag": concept_ctx.get("tag") or "khai_niem",
+                "source_cite": concept_ctx.get("source_cite") or "",
+                "reference": concept_ctx.get("reference") or "",
+                "rubric": concept_ctx.get("rubric") or "",
+                "common_misconceptions": concept_ctx.get("common_misconceptions") or [],
+                "question": next_q,
+            }
+            tok = sign_token({"meta": hidden_meta}, ttl_seconds=SESSION_TTL_S, typ="viva_meta")
+            entry = store.save_viva_entry(
+                session["scan_id"],
+                resolved_member,
+                "coach",
+                concept_key=str(hidden_meta["concept_key"]),
+                question=next_q,
+                answer=req.message,
+                ai_feedback=reply_text,
+                draft=hidden_meta,
+                saved_by_user=0,
+            )
+            return {
+                "entry_id": entry["id"],
+                "mode": "tutor",
+                "reply_text": reply_text,
+                "question": next_q,
+                "concept_key": hidden_meta["concept_key"],
+                "term": hidden_meta["term"],
+                "tag": hidden_meta["tag"],
+                "source_cite": hidden_meta["source_cite"],
+                "viva_meta_token": tok,
+                "bloom_level": None,
+                "bloom_label": "",
+                "draft": None,
+            }
+
+        # mode == "answer"
+        draft = dict(res.get("draft_profile_update") or {})
+        if concept_ctx:
+            if not draft.get("reference"):
+                draft["reference"] = concept_ctx.get("reference", "")
+            if not draft.get("rubric"):
+                draft["rubric"] = concept_ctx.get("rubric", "")
+            if concept_ctx.get("concept_key") and draft.get("concept_key") in {"", "viva-defense-check"}:
+                draft["concept_key"] = concept_ctx["concept_key"]
+            if concept_ctx.get("term") and draft.get("term") in {"", "Phản biện bài nộp"}:
+                draft["term"] = concept_ctx["term"]
+            if not draft.get("source_cite") and concept_ctx.get("source_cite"):
+                draft["source_cite"] = concept_ctx["source_cite"]
+        draft["source_repo"] = str(session.get("source_label") or "")
+        draft["source_scan_id"] = str(session.get("scan_id") or "")
+
+        level = int(res.get("level", 0))
+        visible_feedback = _strip_hidden_blocks(str(res.get("reply_text") or res.get("output") or ""))
+        q_txt = str(res.get("question") or concept_ctx.get("question") or "")
+        entry = store.save_viva_entry(
+            session["scan_id"],
+            resolved_member,
+            "defense",
+            concept_key=str(draft.get("concept_key") or ""),
+            question=q_txt,
+            answer=req.message,
+            ai_feedback=visible_feedback,
+            bloom_level=level,
+            draft=draft,
+            saved_by_user=0,
+        )
+        return {
+            "entry_id": entry["id"],
+            "mode": "answer",
+            "reply_text": visible_feedback,
+            "question": q_txt,
+            "concept_key": draft.get("concept_key") or "",
+            "term": draft.get("term") or "",
+            "tag": draft.get("tag") or "khai_niem",
+            "source_cite": draft.get("source_cite") or "",
+            "viva_meta_token": sign_token(
+                {
+                    "meta": {
+                        "concept_key": draft.get("concept_key") or "",
+                        "term": draft.get("term") or "",
+                        "tag": draft.get("tag") or "khai_niem",
+                        "source_cite": draft.get("source_cite") or "",
+                        "reference": draft.get("reference") or "",
+                        "rubric": draft.get("rubric") or "",
+                        "question": draft.get("next_question") or q_txt,
+                    }
+                },
+                ttl_seconds=SESSION_TTL_S,
+                typ="viva_meta",
+            ),
+            "bloom_level": level,
+            "bloom_label": _BLOOM_TITLES.get(level, f"Level {level}"),
+            "draft": draft,
+        }
+
+    @app.post("/api/viva/chat")
+    def api_viva_chat(req: VivaChatRequest, request: Request, response: Response) -> dict[str, Any]:
+        owner_user_id = _resolve_actor(request, response)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+        concept_ctx = _decode_chat_concept(req)
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+        res = agent.viva_chat(
+            files_content,
+            member_name=req.member_name,
+            mode=req.mode,
+            message=req.message,
+            history=req.history,
+            active_concept=concept_ctx,
+            viva_meta=concept_ctx,
+            bloom_summary=bloom_summary,
+            github_owner=github_owner,
+            line_counts=session.get("line_counts"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("output") or "Không xử lý được lượt vấn đáp.")
+        return _finalize_viva_chat(session, req, res, concept_ctx)
+
+    @app.post("/api/viva/chat/stream")
+    async def api_viva_chat_stream(req: VivaChatRequest, request: Request) -> StreamingResponse:
+        cookie_carrier = Response()
+        owner_user_id = _resolve_actor(request, cookie_carrier)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+        concept_ctx = _decode_chat_concept(req)
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+
+        def _worker(emit: Callable[[str, dict[str, Any]], None]) -> None:
+            mode_low = (req.mode or "answer").strip().lower()
+            label = (
+                "Đang giải thích & gợi ý nâng +1 Bloom..."
+                if mode_low == "tutor"
+                else ("Đang soạn 1 câu hỏi kiểm tra ngắn..." if mode_low in {"start", "next"} else "Đang đánh giá mức hiểu Bloom...")
+            )
+            emit("stage", {"step": "ai", "label": label})
+            res = agent.viva_chat(
+                files_content,
+                member_name=req.member_name,
+                mode=mode_low,
+                message=req.message,
+                history=req.history,
+                active_concept=concept_ctx,
+                viva_meta=concept_ctx,
+                bloom_summary=bloom_summary,
+                github_owner=github_owner,
+                line_counts=session.get("line_counts"),
+                on_delta=lambda kind, chunk: emit("reasoning" if kind == "reasoning" else "content", {"delta": chunk}),
+            )
+            if not res.get("ok"):
+                emit("error", {"status": 400, "detail": res.get("output") or "Không xử lý được lượt vấn đáp."})
+                return
+            emit("done", _finalize_viva_chat(session, req, res, concept_ctx))
+
+        return await _make_sse_response(request, cookie_carrier, _worker)
+
     @app.post("/api/study/confirm-log")
     @app.post("/api/viva/confirm")
     def api_confirm_study_log(req: ConfirmLogRequest, request: Request, response: Response) -> dict[str, Any]:
@@ -1685,6 +1932,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                 req.member_name,
                 draft=req.draft,
                 viva_entry_id=req.entry_id,
+                scan_id=req.scan_id,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1699,7 +1947,11 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         owner_user_id = _resolve_actor(request, response)
         try:
             updated = store.update_card_status(
-                owner_user_id, req.member_name or "member", req.concept_key, req.status
+                owner_user_id,
+                req.member_name or "member",
+                req.concept_key,
+                req.status,
+                member_slug=req.member_slug,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1721,13 +1973,9 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         owner_user_id = _resolve_actor(request, response, require_write=False)
         if member:
             return store.get_user_bloom_profile(owner_user_id, member)
-        conn = store._get_conn()
-        rows = conn.execute(
-            "SELECT * FROM bloom_profiles WHERE owner_user_id = ? ORDER BY bloom_level ASC, updated_at DESC",
-            (owner_user_id,),
-        ).fetchall()
-        concepts = [store._row_to_bloom_item(r) for r in rows]
-        return {"owner_user_id": owner_user_id, "member_slug": "all", "concepts": concepts}
+        concepts = store.list_all_bloom_concepts(owner_user_id)
+        repos = sorted({str(c.get("source_repo") or "") for c in concepts if c.get("source_repo")})
+        return {"owner_user_id": owner_user_id, "member_slug": "all", "repos": repos, "concepts": concepts}
 
     # ── Export (4 formats) ─────────────────────────────────────────────────
 
@@ -1766,6 +2014,50 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    def _run_export_all(fmt: str, owner_user_id: str) -> Response:
+        user = store.get_user(owner_user_id) or {}
+        owner_label = str(user.get("display_name") or user.get("email") or "nguoi-dung")
+        concepts = store.list_all_bloom_concepts(owner_user_id)
+        sessions = store.list_scan_sessions(owner_user_id, limit=50)
+        repos = sorted({str(c.get("source_repo") or "") for c in concepts if c.get("source_repo")})
+        agg_session = {
+            "scan_id": "all-repos",
+            "source_label": f"Tất cả repo ({len(repos) or 1})",
+            "created_at": sessions[0]["created_at"] if sessions else "",
+            "hard_flags": [],
+        }
+        agg_profile = {"concepts": concepts}
+        fmt_low = (fmt or "").strip().lower()
+        if fmt_low == "anki":
+            filename, body = exporters.export_anki_tsv(agg_session, owner_label, agg_profile)
+            media_type = "text/tab-separated-values; charset=utf-8"
+        elif fmt_low == "md":
+            filename, body = exporters.export_markdown_guide(agg_session, owner_label, agg_profile)
+            media_type = "text/markdown; charset=utf-8"
+        elif fmt_low == "etude":
+            filename, body = exporters.export_etude_pack_json(agg_session, owner_label, agg_profile)
+            media_type = "application/json; charset=utf-8"
+        elif fmt_low == "json":
+            sess_brief = [
+                {
+                    "scan_id": s["scan_id"],
+                    "source_type": s["source_type"],
+                    "source_label": s["source_label"],
+                    "created_at": s["created_at"],
+                }
+                for s in sessions
+            ]
+            filename, body = exporters.export_all_knowledge_json(owner_label, concepts, sess_brief)
+            media_type = "application/json; charset=utf-8"
+        else:
+            raise HTTPException(status_code=400, detail=f"Định dạng export không hỗ trợ: {fmt}")
+
+        return Response(
+            content=body.encode("utf-8"),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @app.get("/api/export/{target_key}")
     def api_export(
         target_key: str,
@@ -1774,9 +2066,12 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         scan_id: str = Query(default=""),
         fmt: str = Query(default="anki"),
         member: str = Query(default=""),
+        scope: str = Query(default="session"),
     ) -> Response:
         owner_user_id = _resolve_actor(request, response, require_write=False)
         if target_key.lower() in {"anki", "md", "etude", "json"}:
+            if scope.strip().lower() == "all":
+                return _run_export_all(target_key, owner_user_id)
             if not scan_id:
                 raise HTTPException(status_code=400, detail="Thiếu tham số scan_id.")
             return _run_export(target_key, scan_id, member, owner_user_id)

@@ -1,4 +1,5 @@
 import type {
+  AllKnowledgeResponse,
   BloomDraft,
   CardStatus,
   ExportFormat,
@@ -14,6 +15,9 @@ import type {
   StreamStageEvent,
   SubmissionOption,
   VivaAskResponse,
+  VivaChatHistoryItem,
+  VivaChatMode,
+  VivaChatResponse,
   VivaCoachResponse,
   VivaDefenseResponse,
 } from "../types.ts";
@@ -350,6 +354,21 @@ export async function vivaCoachStream(
   return streamSsePost<VivaCoachResponse>("/api/viva/coach/stream", payload, handlers);
 }
 
+export async function vivaChatStream(
+  payload: {
+    scan_id: string;
+    member_name: string;
+    mode: VivaChatMode;
+    message?: string;
+    history?: VivaChatHistoryItem[];
+    active_concept?: Record<string, unknown>;
+    viva_meta?: Record<string, unknown> | string;
+  },
+  handlers: SseStreamHandlers = {},
+): Promise<VivaChatResponse> {
+  return streamSsePost<VivaChatResponse>("/api/viva/chat/stream", payload, handlers);
+}
+
 export async function confirmStudyLog(payload: {
   scan_id: string;
   member_name: string;
@@ -363,8 +382,9 @@ export async function confirmStudyLog(payload: {
 }
 
 export async function updateCardStatus(payload: {
-  scan_id: string;
+  scan_id?: string;
   member_name: string;
+  member_slug?: string;
   concept_key: string;
   status: CardStatus;
 }): Promise<{ ok: boolean }> {
@@ -378,12 +398,20 @@ export async function getMemberProfile(memberSlug: string): Promise<MemberProfil
   return requestJson<MemberProfileResponse>(`/api/profiles/${encodeURIComponent(memberSlug)}`);
 }
 
+export async function getAllKnowledge(): Promise<AllKnowledgeResponse> {
+  return requestJson<AllKnowledgeResponse>("/api/bloom/me");
+}
+
 export function getExportUrl(fmt: ExportFormat, scanId: string, member: string): string {
   const params = new URLSearchParams({
     scan_id: scanId,
     member,
   });
   return `/api/export/${fmt}?${params.toString()}`;
+}
+
+export function getExportAllUrl(fmt: ExportFormat): string {
+  return `/api/export/${fmt}?scope=all`;
 }
 
 export async function fetchExportPreview(
@@ -403,6 +431,29 @@ export async function fetchExportPreview(
     md: `study-guide-${member}.md`,
     etude: `study-pack-${member}.pack.json`,
     json: `scan-${scanId}.json`,
+  };
+  const content = await res.text();
+  return {
+    content,
+    filename: m?.[1] || extMap[fmt],
+  };
+}
+
+export async function fetchExportAllPreview(
+  fmt: ExportFormat,
+): Promise<{ content: string; filename: string }> {
+  const url = getExportAllUrl(fmt);
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    throw new ApiError(res.status, `Không xuất được định dạng ${fmt} (${res.status})`);
+  }
+  const disp = res.headers.get("Content-Disposition") ?? "";
+  const m = disp.match(/filename="?([^";]+)"?/i);
+  const extMap: Record<ExportFormat, string> = {
+    anki: "anki-all-repos.tsv",
+    md: "study-guide-all.md",
+    etude: "study-pack-all.pack.json",
+    json: "knowledge-all.json",
   };
   const content = await res.text();
   return {

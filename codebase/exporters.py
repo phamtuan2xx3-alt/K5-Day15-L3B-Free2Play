@@ -137,12 +137,14 @@ def _tsv_cell(text: str) -> str:
 
 def _format_card_front(item: dict[str, Any], source_label: str) -> str:
     term = str(item.get("term") or item.get("concept_key") or "Khái niệm").strip()
-    cite = str(item.get("source_cite") or source_label or "").strip()
+    repo_name = str(item.get("source_repo") or source_label or "").strip()
+    cite = str(item.get("source_cite") or "").strip()
     level = int(item.get("bloom_level", 0))
     probe = str(item.get("next_probe") or item.get("prompt") or "").strip()
     parts = [f"<b>{term}</b> (Bloom L{level})"]
-    if cite:
-        parts.append(f"<i>Nguồn: {cite}</i>")
+    loc = " · ".join(x for x in (repo_name, cite) if x)
+    if loc:
+        parts.append(f"<i>Nguồn: {loc}</i>")
     if probe:
         parts.append(probe)
     else:
@@ -187,14 +189,16 @@ def export_anki_tsv(
     source_label = str(session.get("source_label") or "")
     cards = _select_study_concepts(session, profile)
     for item in cards:
-        front = _tsv_cell(_format_card_front(item, source_label))
+        item_repo = str(item.get("source_repo") or source_label or "")
+        item_repo_slug = slugify(item_repo, repo_slug or "repo")
+        front = _tsv_cell(_format_card_front(item, item_repo))
         back = _tsv_cell(_format_card_back(item))
         level = int(item.get("bloom_level", 0))
         tag_slug = slugify(str(item.get("tag") or "khai_niem"), "khai-niem")
         concept_slug = slugify(str(item.get("concept_key") or "concept"), "concept")
         tags = f"repoksv bloom-L{level} {tag_slug} {concept_slug}"
-        if repo_slug:
-            tags = f"{tags} repo-{repo_slug}"
+        if item_repo_slug:
+            tags = f"{tags} repo-{item_repo_slug}"
         lines.append(f"{front}\t{back}\t{_sanitize_tsv_cell(tags)}")
 
     return filename, "\n".join(lines) + "\n"
@@ -254,8 +258,11 @@ def export_markdown_guide(
         for item in group:
             level = int(item.get("bloom_level", 0))
             term = str(item.get("term") or item.get("concept_key") or "Khái niệm")
-            cite = str(item.get("source_cite") or source_label)
+            item_repo = str(item.get("source_repo") or source_label or "")
+            cite = str(item.get("source_cite") or item_repo or source_label)
             out.append(f"### {term} (`{item.get('concept_key', '')}` · {BLOOM_LABELS.get(level, f'L{level}')})")
+            if item_repo:
+                out.append(f"- **Repo nguồn:** `{item_repo}`")
             out.append(f"- **Trích dẫn:** `{cite}`")
             if item.get("reference"):
                 out.append(f"- **Bản chất:** {item['reference']}")
@@ -290,7 +297,8 @@ def export_etude_pack_json(
     for idx, item in enumerate(cards, 1):
         concept_key = str(item.get("concept_key") or f"concept-{idx}")
         term = str(item.get("term") or concept_key)
-        cite = str(item.get("source_cite") or source_label)
+        item_repo = str(item.get("source_repo") or source_label or "RepoKSV")
+        cite = str(item.get("source_cite") or item_repo)
         level = int(item.get("bloom_level", 0))
         prompt_text = str(
             item.get("next_probe")
@@ -313,7 +321,7 @@ def export_etude_pack_json(
                 rubric_parts.append("Tránh ngộ nhận: " + "; ".join(str(x) for x in item["misconceptions"]))
             rubric_text = " ".join(rubric_parts)
 
-        explanation_parts = [f"### {term} (`{cite}`)"]
+        explanation_parts = [f"### {term} (`{item_repo}` · `{cite}`)"]
         if item.get("reference"):
             explanation_parts.append(str(item["reference"]))
         if item.get("misconceptions"):
@@ -328,6 +336,7 @@ def export_etude_pack_json(
             "tags": [
                 f"bloom::L{level}",
                 f"topic::{slugify(str(item.get('tag') or 'khai_niem'), 'khai-niem')}",
+                f"repo::{slugify(item_repo, 'repo')}",
                 f"member::{user_slug}",
             ],
             "fields": {
@@ -338,6 +347,7 @@ def export_etude_pack_json(
                 "explanation": "\n\n".join(explanation_parts),
             },
             "source": cite,
+            "source_repo": item_repo,
         })
 
     pack = {
@@ -367,5 +377,25 @@ def export_session_json(
         "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "scan_session": session,
         "viva_entries": viva_entries or [],
+    }
+    return filename, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def export_all_knowledge_json(
+    owner_label: str,
+    concepts: list[dict[str, Any]],
+    sessions_summary: list[dict[str, Any]],
+) -> tuple[str, str]:
+    """Xuất toàn bộ hệ thống kiến thức Bloom của tài khoản qua mọi repo."""
+    filename = f"knowledge-all-{slugify(owner_label, 'user')}.json"
+    repos = sorted({str(c.get("source_repo") or "") for c in concepts if c.get("source_repo")})
+    payload = {
+        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "scope": "all",
+        "owner": owner_label,
+        "total_concepts": len(concepts),
+        "repos": repos,
+        "concepts": concepts,
+        "sessions": sessions_summary,
     }
     return filename, json.dumps(payload, ensure_ascii=False, indent=2)

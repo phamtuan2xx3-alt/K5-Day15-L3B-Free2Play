@@ -786,6 +786,124 @@ class TestPhase5Api(unittest.TestCase):
         self.assertEqual(coach_evs[-1][0], "done")
         self.assertIn("advice", coach_evs[-1][1])
 
+    def test_dynamic_rubric_custom_repo_viva_chat_and_export_all(self):
+        # 1. Custom lab repo does NOT receive Day-15 TEAMS-FORMAT / CANVAS-7ROWS rubric in LLM prompt,
+        #    and DOES receive measured GitHub Live Guard status.
+        captured_prompts: list[str] = []
+        fake_snap = {
+            "ok": True,
+            "full_name": "phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming",
+            "owner": "phamtuan2xx3-alt",
+            "commit_sha": "abc9999",
+            "repo_profile": "repo_custom_rubric",
+            "present_files": ["README.md", "TEAM.md", "RUBRIC.md", "SUBMISSION.md"],
+            "missing_required": [],
+            "line_counts": {"README.md": 10, "TEAM.md": 10, "RUBRIC.md": 10, "SUBMISSION.md": 10},
+            "files_content": {
+                "README.md": "# Lab Day 02",
+                "TEAM.md": "- Tên nhóm: E99\n| STT | Tên | Vai trò | Việc |\n|---|---|---|---|\n| 1 | Chu Văn Nhật | TV | Doc |\n| 2 | Phạm Quang Tuấn | Nhóm trưởng | Code |",
+                "RUBRIC.md": "# Rubric riêng của Lab",
+                "SUBMISSION.md": "# Quy định nộp",
+            },
+            "hard_flags": [],
+            "checks": {
+                "public_access": {"status": "pass", "default_branch": "main"},
+                "git_fork_pr": {"status": "pass", "detail": "Không thấy PR mở nhầm về repo gốc."},
+                "penalty_standard": {"status": "pass"},
+                "penalty_key": {"status": "pass"},
+            },
+            "g10_warnings": [],
+        }
+
+        def fake_call_model(system, user, model=None, *, on_delta=None):
+            captured_prompts.append(user)
+            txt = "Không phát hiện lỗi sai phạm tại `TEAM.md:L01`."
+            if callable(on_delta):
+                on_delta("content", txt)
+            return {"text": txt, "model": "fake-custom", "tokens_in": 10, "tokens_out": 10}
+
+        with (
+            patch.object(github_guard, "fetch_github_repo_snapshot", return_value=fake_snap),
+            patch("agent.call_model", side_effect=fake_call_model),
+        ):
+            r_gh = self.client.post(
+                "/api/scan/stream",
+                json={"target": "https://github.com/phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming", "force_refresh": True},
+            )
+        self.assertEqual(r_gh.status_code, 200)
+        self.assertEqual(len(captured_prompts), 1)
+        self.assertNotIn("TEAMS-FORMAT:", captured_prompts[0])
+        self.assertNotIn("CANVAS-7ROWS:", captured_prompts[0])
+        self.assertIn("PENALTY-KEY:", captured_prompts[0])
+        self.assertIn("GIT-FORK-PR=PASS", captured_prompts[0])
+
+        scan_gh = self._parse_sse(r_gh.text)[-1][1]
+        gh_scan_id = scan_gh["scan_id"]
+        gh_member = scan_gh["members"][0]["name"]
+
+        # 2. Conversational Viva Chat SSE (start -> answer -> tutor -> save -> all-repo export)
+        st = self.client.post(
+            "/api/viva/chat/stream",
+            json={"scan_id": gh_scan_id, "member_name": gh_member, "mode": "start"},
+        )
+        self.assertEqual(st.status_code, 200)
+        st_done = self._parse_sse(st.text)[-1][1]
+        self.assertEqual(st_done["mode"], "start")
+
+        ans = self.client.post(
+            "/api/viva/chat/stream",
+            json={
+                "scan_id": gh_scan_id,
+                "member_name": gh_member,
+                "mode": "answer",
+                "message": "Vì `TEAM.md:L01` chỉ cần theo rubric riêng ở RUBRIC.md.",
+                "viva_meta": st_done.get("viva_meta_token"),
+            },
+        )
+        self.assertEqual(ans.status_code, 200)
+        ans_done = self._parse_sse(ans.text)[-1][1]
+        self.assertEqual(ans_done["mode"], "answer")
+        self.assertEqual(ans_done["draft"]["source_repo"], "phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming")
+
+        tut = self.client.post(
+            "/api/viva/chat/stream",
+            json={
+                "scan_id": gh_scan_id,
+                "member_name": gh_member,
+                "mode": "tutor",
+                "message": "Giúp mình nâng bậc lên Level cao hơn",
+                "history": [
+                    {"role": "assistant", "content": st_done["question"]},
+                    {"role": "user", "content": "Theo TEAM.md"},
+                    {"role": "assistant", "content": ans_done["reply_text"]},
+                ],
+                "viva_meta": ans_done.get("viva_meta_token"),
+            },
+        )
+        self.assertEqual(tut.status_code, 200)
+        tut_done = self._parse_sse(tut.text)[-1][1]
+        self.assertEqual(tut_done["mode"], "tutor")
+
+        saved = self.client.post(
+            "/api/study/confirm-log",
+            json={
+                "scan_id": gh_scan_id,
+                "member_name": gh_member,
+                "entry_id": ans_done["entry_id"],
+                "draft": ans_done["draft"],
+            },
+        )
+        self.assertEqual(saved.status_code, 200)
+
+        bloom_all = self.client.get("/api/bloom/me").json()
+        self.assertIn("phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming", bloom_all["repos"])
+        self.assertTrue(any(c["source_repo"] == "phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming" for c in bloom_all["concepts"]))
+
+        for fmt in ("anki", "md", "etude", "json"):
+            exp_all = self.client.get(f"/api/export/{fmt}", params={"scope": "all"})
+            self.assertEqual(exp_all.status_code, 200, fmt)
+            self.assertIn("phamtuan2xx3-alt/K5-L3B-DAY02-E99-DiscoveryProblemFraming", exp_all.text)
+
 
 if __name__ == "__main__":
     unittest.main()

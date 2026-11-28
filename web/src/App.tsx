@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { BookMarked, FileSearch, MessageSquare, type LucideIcon } from "lucide-react";
 import {
   ApiError,
   getFileLines,
@@ -11,7 +12,7 @@ import {
 } from "@/api/client.ts";
 import { AuditPanel, ScanStreamPanel } from "@/components/AuditPanel.tsx";
 import { CiteDialog } from "@/components/CiteDialog.tsx";
-import { ExportPanel } from "@/components/ExportPanel.tsx";
+import { KnowledgeHubPanel } from "@/components/KnowledgeHubPanel.tsx";
 import { LegalPage } from "@/components/LegalPages.tsx";
 import { ScanSidebar } from "@/components/ScanSidebar.tsx";
 import { TopBar } from "@/components/TopBar.tsx";
@@ -19,6 +20,7 @@ import { VivaStudyPanel } from "@/components/VivaStudyPanel.tsx";
 import { Alert } from "@/components/ui/alert.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import type {
+  BloomConcept,
   FileLineItem,
   MeResponse,
   ScanDiffSummary,
@@ -27,14 +29,15 @@ import type {
   ScanStreamState,
   SubmissionOption,
 } from "@/types.ts";
+import { parseAuditReport, type VivaStarterQuestion } from "@/utils/auditSections.ts";
 import { extractUrlHackTarget } from "@/utils/citations.ts";
 
-type TabId = "audit" | "viva" | "export";
+type TabId = "audit" | "viva" | "knowledge";
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "audit", label: "Soi Repo" },
-  { id: "viva", label: "Vấn đáp Bloom" },
-  { id: "export", label: "Xuất file" },
+const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
+  { id: "audit", label: "Soi Repo", icon: FileSearch },
+  { id: "viva", label: "Vấn đáp", icon: MessageSquare },
+  { id: "knowledge", label: "Hệ thống kiến thức", icon: BookMarked },
 ];
 
 export function App() {
@@ -54,16 +57,26 @@ export function App() {
   const [needsAuth, setNeedsAuth] = useState(false);
 
   const [activeTab, setActiveTab] = useState<TabId>("audit");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("repoksv-sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [vivaStarters, setVivaStarters] = useState<VivaStarterQuestion[]>([]);
+  const [drillConcept, setDrillConcept] = useState<BloomConcept | null>(null);
+  const [knowledgeVersion, setKnowledgeVersion] = useState<number>(0);
   const baseId = useId();
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     audit: null,
     viva: null,
-    export: null,
+    knowledge: null,
   });
   const panelRefs = useRef<Record<TabId, HTMLDivElement | null>>({
     audit: null,
     viva: null,
-    export: null,
+    knowledge: null,
   });
 
   // Cite Modal state
@@ -118,6 +131,7 @@ export function App() {
       const detail = await getSession(scanId);
       setActiveSession(detail);
       setActiveDiff(detail.diff ?? null);
+      setVivaStarters(parseAuditReport(detail.audit_output).vivaQuestions);
       if (!detail.diff) {
         getSessionDiff(scanId)
           .then((d) => setActiveDiff(d))
@@ -180,6 +194,7 @@ export function App() {
         if (ctrl.signal.aborted) return;
         setActiveSession(detail);
         setActiveDiff(detail.diff ?? null);
+        setVivaStarters(parseAuditReport(detail.audit_output).vivaQuestions);
         setActiveTab("audit");
         setScanStream(null);
         await refreshSessions();
@@ -242,8 +257,8 @@ export function App() {
     };
   }, [handleScan, handleSelectSession, refreshSessions]);
 
-  // Sync hidden="until-found" and beforematch
-  useEffect(() => {
+  // Sync hidden="until-found" synchronously before paint to eliminate tab-switch flicker
+  useLayoutEffect(() => {
     for (const tab of TABS) {
       const panel = panelRefs.current[tab.id];
       if (!panel) continue;
@@ -273,7 +288,6 @@ export function App() {
 
   const selectTab = (tabId: TabId) => {
     setActiveTab(tabId);
-    tabRefs.current[tabId]?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   const handleTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -288,13 +302,19 @@ export function App() {
       e.preventDefault();
       const nextTab = TABS[nextIdx].id;
       selectTab(nextTab);
-      tabRefs.current[nextTab]?.focus();
+      const btn = tabRefs.current[nextTab];
+      btn?.focus();
+      const listEl = e.currentTarget;
+      if (btn && listEl.scrollWidth > listEl.clientWidth) {
+        btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
     }
   };
 
   const handleOpenCite = useCallback(
-    async (file: string, line: number) => {
-      if (!activeSession) return;
+    async (file: string, line: number, overrideScanId?: string) => {
+      const targetScanId = overrideScanId || activeSession?.scan_id;
+      if (!targetScanId) return;
       setCiteState({
         open: true,
         file,
@@ -304,7 +324,7 @@ export function App() {
         error: null,
       });
       try {
-        const res = await getFileLines(activeSession.scan_id, file, line);
+        const res = await getFileLines(targetScanId, file, line);
         setCiteState((prev) =>
           prev.open
             ? {
@@ -328,11 +348,44 @@ export function App() {
     [activeSession],
   );
 
+  const handleDrillFromKnowledge = useCallback(
+    async (concept: BloomConcept) => {
+      setDrillConcept(concept);
+      const targetScanId = concept.source_scan_id;
+      if (targetScanId && targetScanId !== activeSession?.scan_id) {
+        await handleSelectSession(targetScanId);
+      } else if (
+        !targetScanId &&
+        concept.source_repo &&
+        concept.source_repo !== activeSession?.source_label
+      ) {
+        const matched = sessions.find((s) => s.source_label === concept.source_repo);
+        if (matched) {
+          await handleSelectSession(matched.scan_id);
+        }
+      }
+      selectTab("viva");
+    },
+    [activeSession?.scan_id, activeSession?.source_label, handleSelectSession, sessions],
+  );
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("repoksv-sidebar-collapsed", next ? "1" : "0");
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  }, []);
+
   const isLegalRoute = pathname === "/login" || pathname === "/privacy" || pathname === "/terms";
 
   const footerNode = (
     <footer className="border-t border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="mx-auto flex w-full max-w-[1040px] flex-wrap items-center justify-between gap-3">
         <span>RepoKSV · Giám khảo ảo AI20K (Nhóm Free2Play · NO-AUTO-GRADE)</span>
         <nav aria-label="Liên kết pháp lý">
           <ul className="m-0 flex list-none gap-4 p-0">
@@ -379,7 +432,13 @@ export function App() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      className={
+        isLegalRoute
+          ? "flex min-h-screen flex-col bg-background text-foreground"
+          : "flex min-h-screen flex-col bg-background text-foreground lg:h-screen lg:overflow-hidden"
+      }
+    >
       {isLegalRoute ? (
         <>
           <TopBar
@@ -398,7 +457,13 @@ export function App() {
           {footerNode}
         </>
       ) : (
-        <div className="grid flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div
+          className={
+            sidebarCollapsed
+              ? "grid flex-1 grid-cols-1 lg:min-h-0 lg:overflow-hidden lg:grid-cols-[64px_minmax(0,1fr)] lg:transition-[grid-template-columns] lg:duration-250 lg:ease-[cubic-bezier(0.23,1,0.32,1)]"
+              : "grid flex-1 grid-cols-1 lg:min-h-0 lg:overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)] lg:transition-[grid-template-columns] lg:duration-250 lg:ease-[cubic-bezier(0.23,1,0.32,1)]"
+          }
+        >
           <ScanSidebar
             sessions={sessions}
             activeScanId={activeSession?.scan_id ?? null}
@@ -406,9 +471,11 @@ export function App() {
             loading={sessionsLoading}
             me={me}
             onNavigate={navigate}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebarCollapsed}
           />
 
-          <div className="order-first lg:order-last flex min-w-0 flex-col bg-background">
+          <div className="order-first lg:order-last flex min-w-0 flex-col bg-background lg:min-h-0 lg:overflow-hidden">
             <TopBar
               targetInput={targetInput}
               onTargetInputChange={setTargetInput}
@@ -418,6 +485,10 @@ export function App() {
               onNavigate={navigate}
             />
 
+            <div
+              id="content-scroller"
+              className="scroller flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto [scrollbar-gutter:stable]"
+            >
             <main
               id="main-content"
               tabIndex={-1}
@@ -431,7 +502,7 @@ export function App() {
               )}
 
               {needsAuth ? (
-                <div className="tabpanel-inner space-y-3">
+                <div className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-3">
                   <h1 className="m-0 text-xl font-bold tracking-tight">Đăng nhập để quét &amp; lưu hồ sơ Bloom</h1>
                   <p className="m-0 text-sm text-muted-foreground">
                     Máy chủ hiện yêu cầu tài khoản Google.
@@ -446,7 +517,7 @@ export function App() {
               ) : scanStream ? (
                 <ScanStreamPanel stream={scanStream} onCancel={handleCancelScan} />
               ) : !activeSession ? (
-                <div className="tabpanel-inner space-y-3">
+                <div className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-3">
                   <h1 className="m-0 text-xl font-bold tracking-tight">
                     {scanning ? "Đang quét…" : "Chọn S01–S30 hoặc dán link GitHub"}
                   </h1>
@@ -472,33 +543,39 @@ export function App() {
               ) : (
                 <>
                   <h1 className="sr-only">Kiểm toán và Vấn đáp: {activeSession.source_label}</h1>
-                  <div
-                    role="tablist"
-                    aria-label="Khu vực làm việc RepoKSV"
-                    className="flex overflow-x-auto border-b border-border bg-card/40 px-4 sm:px-6 gap-1"
-                    onKeyDown={handleTabKeyDown}
-                  >
-                    {TABS.map((tab) => {
-                      const selected = activeTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          ref={(el) => {
-                            tabRefs.current[tab.id] = el;
-                          }}
-                          type="button"
-                          role="tab"
-                          id={`${baseId}-tab-${tab.id}`}
-                          aria-controls={`${baseId}-panel-${tab.id}`}
-                          aria-selected={selected}
-                          tabIndex={selected ? 0 : -1}
-                          className="tab-btn"
-                          onClick={() => selectTab(tab.id)}
-                        >
-                          {tab.label}
-                        </button>
-                      );
-                    })}
+                  <div className="border-b border-border bg-card/50">
+                    <div className="mx-auto flex w-full max-w-[1040px] items-center px-4 py-2.5 sm:px-6">
+                      <div
+                        role="tablist"
+                        aria-label="Khu vực làm việc RepoKSV"
+                        className="inline-flex max-w-full overflow-x-auto items-center gap-1 rounded-lg border border-border bg-muted/70 p-1"
+                        onKeyDown={handleTabKeyDown}
+                      >
+                        {TABS.map((tab) => {
+                          const selected = activeTab === tab.id;
+                          const Icon = tab.icon;
+                          return (
+                            <button
+                              key={tab.id}
+                              ref={(el) => {
+                                tabRefs.current[tab.id] = el;
+                              }}
+                              type="button"
+                              role="tab"
+                              id={`${baseId}-tab-${tab.id}`}
+                              aria-controls={`${baseId}-panel-${tab.id}`}
+                              aria-selected={selected}
+                              tabIndex={selected ? 0 : -1}
+                              className="tab-btn"
+                              onClick={() => selectTab(tab.id)}
+                            >
+                              <Icon aria-hidden="true" className="h-[15px] w-[15px] shrink-0" />
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
 
                   <div
@@ -514,6 +591,10 @@ export function App() {
                       session={activeSession}
                       diff={activeDiff}
                       onSelectCite={(f, l) => void handleOpenCite(f, l)}
+                      onGoToViva={(starters) => {
+                        if (starters.length > 0) setVivaStarters(starters);
+                        selectTab("viva");
+                      }}
                     />
                   </div>
 
@@ -528,26 +609,36 @@ export function App() {
                   >
                     <VivaStudyPanel
                       session={activeSession}
+                      starterQuestions={vivaStarters}
+                      drillConcept={drillConcept}
                       onSelectCite={(f, l) => void handleOpenCite(f, l)}
+                      onKnowledgeSaved={() => setKnowledgeVersion((v) => v + 1)}
+                      onConsumeDrillConcept={() => setDrillConcept(null)}
                     />
                   </div>
 
                   <div
                     ref={(el) => {
-                      panelRefs.current.export = el;
+                      panelRefs.current.knowledge = el;
                     }}
                     role="tabpanel"
-                    id={`${baseId}-panel-export`}
-                    aria-labelledby={`${baseId}-tab-export`}
+                    id={`${baseId}-panel-knowledge`}
+                    aria-labelledby={`${baseId}-tab-knowledge`}
                     className="tabpanel"
                   >
-                    <ExportPanel session={activeSession} />
+                    <KnowledgeHubPanel
+                      activeSession={activeSession}
+                      refreshTrigger={knowledgeVersion}
+                      onDrillConcept={(c) => void handleDrillFromKnowledge(c)}
+                      onSelectCite={(f, l, sid) => void handleOpenCite(f, l, sid)}
+                    />
                   </div>
                 </>
               )}
             </main>
 
             {footerNode}
+            </div>
           </div>
         </div>
       )}
