@@ -359,8 +359,8 @@
       </div>
 
       <div class="card dark" style="margin-top:16px; flex-direction:row; justify-content:space-between; align-items:center">
-        <div><b>Sẵn sàng chạy câu thử lạ của giám khảo ngay tại chỗ</b> (CLI <code>python run.py</code> hoặc Web UI).</div>
-        <div><span class="todo-tag" style="background:#1e293b; color:#fde68a; border-color:#fde68a">Link Video dự phòng: [Dán link đã kiểm tab ẩn danh]</span></div>
+        <div><b>Sẵn sàng chạy câu thử lạ của giám khảo ngay tại chỗ</b> (CLI <code>python run.py</code> hoặc Web <code>repoksv.tuanpq.com</code>).</div>
+        <div><span style="font-weight:700; color:#bfdbfe">Video dự phòng 2 phút (S01 + S14 thật) đã nộp form CP4</span></div>
       </div>
     </section>
 
@@ -451,11 +451,11 @@
           </table>
         </div>
         <div class="card blue">
-          <h3>Cấu hình mô phỏng ≥50 phiên (seed = 42)</h3>
-          <ul class="list" style="font-size:15.5px">
-            <li><span class="dot"></span><span><b>3 kịch bản quy mô thật:</b> Thấp <b>300</b> · Cơ sở <b>700</b> (lớp L3) · Cao <b>1.000</b> (cả khoá).</span></li>
-            <li><span class="dot"></span><span><b>2 tầng giá model</b> (bảng giá BTC xem 25/11/2026, USD/1M token): Nhỏ <code>gemini-3.1-flash-lite</code> ($0.25 / $1.50) · Lớn <code>gemini-4-hydrogen</code> ($1.50 / $7.50).</span></li>
-            <li><span class="dot"></span><span><b>Công thức:</b> Chi phí / task thành công = Chi phí TB/phiên ÷ Tỉ lệ đạt Lượt 2.</span></li>
+          <h3>Cấu hình mô phỏng 50 phiên (seed = 42, 0 lỗi)</h3>
+          <ul class="list" style="font-size:15px">
+            <li><span class="dot"></span><span><b>3 kịch bản quy mô:</b> Thấp <b>300</b> · Cơ sở <b>700</b> (L3) · Cao <b>1.000</b> (khoá).</span></li>
+            <li><span class="dot"></span><span><b>Đo token trên</b> <code>chib/deepseek-v4.1-flash</code> (<code>enable_thinking=False</code>) · tỉ lệ đạt Lượt 2: <b>97% (29/30)</b>.</span></li>
+            <li><span class="dot"></span><span><b>2 tầng giá (USD/1M):</b> <code>deepseek-flash</code> ($0.30 / $1.20) · <code>gpt-6.2-sol</code> ($2.00 / $10.00).</span></li>
           </ul>
         </div>
       </div>
@@ -474,28 +474,28 @@
         </thead>
         <tbody>
           <tr>
-            <td><b>Tầng Nhỏ</b> (<code>gemini-3.1-flash-lite</code>)</td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
+            <td><b>Tầng Nhỏ</b> (<code>deepseek-flash</code>)</td>
+            <td><b>$0.0075</b></td>
+            <td><b style="color:var(--green)">$0.0077</b></td>
+            <td>$53.70</td>
+            <td><b>$125.29</b></td>
+            <td>$178.99</td>
+            <td><b style="color:var(--green)">$0.1790</b></td>
           </tr>
           <tr>
-            <td><b>Tầng Lớn</b> (<code>gemini-4-hydrogen</code>)</td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
-            <td><span class="todo-tag">⏳ $____</span></td>
+            <td><b>Tầng Lớn</b> (<code>gpt-6.2-sol</code>)</td>
+            <td>$0.0579</td>
+            <td>$0.0599</td>
+            <td>$415.33</td>
+            <td>$969.09</td>
+            <td>$1,384.42</td>
+            <td>$1.38</td>
           </tr>
         </tbody>
       </table>
 
       <div class="card green" style="padding:12px 18px">
-        <p style="font-size:16px"><b>So với Impact (§2):</b> Chi phí <span class="todo-tag">⏳ $____ / HV / tháng</span> so với <b>4,1 giờ tự rà/HV/tháng</b> + chặn rủi ro −10đ (12% suýt lộ key) và 33% PR nhầm không ai phát hiện → <span class="todo-tag">⏳ Kết luận đáng làm / tối ưu token đầu ra</span>.</p>
+        <p style="font-size:16px"><b>So với Impact (§2):</b> Chi phí <b>$0.1790 / HV / tháng</b> (<b>$0.0077 / task thành công</b>) đổi lấy <b>4,1 giờ tự rà/HV/tháng</b> + chặn rủi ro −10đ (12% lộ key) &amp; 33% PR nhầm → <b>Rất đáng làm ở tầng Nhỏ</b> (đã đạt 97%, chưa cần model đắt gấp ~8×).</p>
       </div>
     </section>
 
@@ -528,7 +528,7 @@
           <h3>3. Kinh tế khả thi (Trang 6)</h3>
           <ul class="list" style="font-size:15.5px">
             <li><span class="dot green"></span><span>Workflow 1 lượt model + lọc 0 token khi thiếu ID.</span></li>
-            <li><span class="dot green"></span><span>Cơ sở 700 HV: <span class="todo-tag">⏳ $____/tháng</span> với tầng Nhỏ.</span></li>
+            <li><span class="dot green"></span><span>Cơ sở 700 HV: <b>$125.29/tháng</b> (<b>$0.1790/HV/tháng</b> · <b>$0.0077/task</b>) với tầng Nhỏ (<code>simulate-1</code>, 50/50 phiên).</span></li>
             <li><span class="dot green"></span><span><b>Khuyến nghị:</b> Triển khai bản nhẹ cho L3 dùng trước hạn nộp lab, sau khi rút gọn token đầu ra và đọc git thật.</span></li>
           </ul>
         </div>
@@ -548,8 +548,8 @@
           <h3>Lộ trình 1 tuần tiếp theo</h3>
           <ul class="list" style="font-size:16px">
             <li><span class="dot clay"></span><span><b>1. Đọc trạng thái Git thật (remote &amp; nhánh PR) thay cho <code>meta.json</code> mẫu:</b> Giải quyết trực tiếp pain số 1 (865 PR nhầm, 33% không ai phát hiện) ngay trước lệnh <code>git push</code>.</span></li>
-            <li><span class="dot blue"></span><span><b>2. Cắt gọn prompt &amp; output token:</b> Lượt 1 trung bình <code>9.430</code> token đầu ra/câu (do reasoning/trình bày dài) → chuẩn hoá schema output gọn giúp giảm 50–70% chi phí ở quy mô 1.000 HV.</span></li>
-            <li><span class="dot green"></span><span><b>3. Tích hợp phản hồi người dùng thử (<code>validation/log.md</code>):</b> <span class="todo-tag">⏳ Điền 1 cải tiến từ 2–3 bạn test tại C401</span>.</span></li>
+            <li><span class="dot blue"></span><span><b>2. Cắt gọn prompt &amp; schema đầu ra:</b> Tắt suy nghĩ (<code>enable_thinking=False</code>) đã giảm từ <code>9.430</code> → <code>2.174</code> token ra/lượt (<code>$0.0077/task</code>); rút gọn JSON schema sẽ hạ tiếp chi phí ở quy mô 1.000 HV.</span></li>
+            <li><span class="dot green"></span><span><b>3. Tổ chức kiểm thử người dùng thật (<code>validation/log.md</code>):</b> Giao việc 2–3 học viên L3 ngoài nhóm tại C401 theo 5 nhịp để tinh chỉnh UI web &amp; câu hỏi vặn trước khi mở rộng toàn khoá.</span></li>
           </ul>
         </div>
         <div class="card blue">
