@@ -10,7 +10,7 @@
 
 ## 2. Bộ câu thử dựng ra sao
 
-- `eval/benchmark.csv`: **15 câu tại CP2** (`thuong` 7 · `kho` 6 · `tu_choi` 2, trong đó 2 câu tấn công `S14`, `S15`; sẽ mở rộng lên 20–30 câu trước CP3)
+- `eval/benchmark.csv`: **30 câu tại CP3** (`thuong` 13 · `kho` 12 · `tu_choi` 5; mở rộng từ 15 câu CP2 → 25 → 30, giữ nguyên câu cũ; 16/30 từ `nguoi_dung`/`data_that`). Dòng dưới là số liệu tại CP2:
 - Nguồn: `nguoi_dung` 5 · `data_that` 2 · `tu_viet` 3 · `sinh_seed` 5 → **từ người dùng / data thật: 7/15 (46.7% ≥ 1/3)**
 - Độ phủ — lưới input 4 chiều: *(1) loại lỗi* (sạch / format / PR nhầm repo / thiếu file / lệch số / lộ key / sửa chuẩn / đa lỗi / tấn công) · *(2) nguồn gốc lỗi* (code cứng bắt được vs cần AI đối chiếu) · *(3) độ đầy đủ ngữ cảnh* (đủ hồ sơ / thiếu file / thiếu `SUBMISSION_ID`) · *(4) mức độ đắt khi sai* (báo nhầm / mất 10đ / 0đ khối / vượt thẩm quyền)
 - Câu `kho` trỏ về 4 lớp chỗ khó (`spec.md` §5): lớp 1 (`S07`, `S08`) · lớp 2 (`S05`, `S10`) · lớp 3 (`S14`, `S15` ở `tu_choi`) · lớp 4 (`S09`, `S12`)
@@ -36,11 +36,13 @@
 
 | Lượt | Run ID | Model | Cấu hình (prompt / công cụ / thay đổi) | Đạt / tổng | % | Đạt chuẩn? |
 |---|---|---|---|---|---|---|
-| 1 | *(Chờ CP3)* | *(Chờ nối model thật)* | *(Chạy sau khi nối API trong `.env` và mở rộng 20–30 câu)* | Chờ CP3 | Chờ CP3 | Chờ CP3 |
-| 2 | *(Chờ CP4)* | *(Chờ CP4)* | *(Cải tiến nhắm nhóm lỗi đau nhất từ Lượt 1)* | Chờ CP4 | Chờ CP4 | Chờ CP4 |
+| 1 | `run-1@20261128-103540` | `deepseek-v4.1-flash` (Vilao) | Workflow 3 bước, 1 lượt gọi model / câu, prompt trước commit `bc24bf0` | 29/30 | 97% | Đạt |
+| 2 | *(đang chạy từ 14:18 28/11, chưa xong tại CP4)* | `deepseek-v4.1-flash` (Vilao) | + commit `bc24bf0`: ép báo G10 thiếu file đầu mục (1), thu hẹp lọc NO-AUTO-GRADE, gợi ý ID S01–S30 | — | — | — |
 
 Lượt chạy lại vì lỗi kỹ thuật, lượt sau CP4: ghi thêm dòng, không sửa dòng cũ.
 
 ## 6. Lỗi chính
 
-*(Cập nhật sau khi chạy Lượt 1 → Lượt 2 cho CP3/CP4.)*
+- **Xếp sai mức nghiêm trọng** (`S12`, câu trượt duy nhất lượt 1): lỗi thiếu file bị đẩy xuống sau lỗi nhẹ.
+- **Hậu kiểm NO-AUTO-GRADE bắt nhầm** (`S21`) và **gợi ý ID lỗi thời** (`S23`): không làm trượt câu nhưng gây báo động giả / hướng dẫn sai.
+- Chi tiết input · output · vì sao sai: `eval/report.md` mục 2.
