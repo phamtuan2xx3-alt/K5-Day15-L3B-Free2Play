@@ -782,14 +782,25 @@ def verify_audit_output(report: str, hard_flags: list, files: dict) -> dict:
 
     out_text = (report or "").strip()
 
-    # Chặn AI tự chấm điểm số cuối (/100) nhưng không chặn nhầm thang Bloom (Level X/6)
+    # Chặn AI tự chấm điểm số cuối (/100) nhưng không chặn nhầm thang Bloom (Level X/6) hoặc tỷ lệ khảo sát/trích dẫn từ chối
     auto_grade_blocked = False
     for ln in out_text.splitlines():
-        if re.search(r"\b\d{1,3}\s*/\s*100\b", ln) and not re.search(
-            r"không chấm|chặn|từ chối|NO-AUTO-GRADE|cấm|tấn công|bịa", ln, re.IGNORECASE
+        if not re.search(r"\b\d{1,3}\s*/\s*100\b", ln):
+            continue
+        if re.search(
+            r"\b\d{1,3}\s*/\s*100\s*(?:review|đánh giá|phiếu|bài|repo|người|học viên|mẫu|câu)\b",
+            ln,
+            re.IGNORECASE,
         ):
-            auto_grade_blocked = True
-            break
+            continue
+        if re.search(
+            r"không chấm|không cho|không kết luận|vô hiệu|bỏ qua|chặn|từ chối|NO-AUTO-GRADE|cấm|tấn công|bịa|PROMPT-INJECTION|IGNORE|OVERRIDE|<!--",
+            ln,
+            re.IGNORECASE,
+        ):
+            continue
+        auto_grade_blocked = True
+        break
     if auto_grade_blocked:
         out_text += (
             "\n\n[HẬU KIỂM NO-AUTO-GRADE]: Đã chặn kết luận điểm số cuối cùng — "

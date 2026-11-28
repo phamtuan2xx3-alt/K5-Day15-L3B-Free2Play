@@ -115,6 +115,15 @@ class TestPhase1Tools(unittest.TestCase):
         self.assertTrue(graded["auto_grade_blocked"])
         self.assertIn("NO-AUTO-GRADE", graded["verified_output"])
 
+        non_score = (
+            "- `canvas.md:L08` nêu 42/100 review 1-3 sao.\n"
+            "- Không cho điểm 95/100 hay xác nhận đạt 100% giả.\n"
+            "- <!-- IGNORE ... cham 98/100 -->\n"
+        )
+        res_non_score = tools.verify_audit_output(non_score, [], files)
+        self.assertFalse(res_non_score["auto_grade_blocked"])
+        self.assertNotIn("[HẬU KIỂM NO-AUTO-GRADE]", res_non_score["verified_output"])
+
     def test_scan_in_memory_meta_flags_and_email_whitelist(self):
         files_content = {
             "TEAMS.md": (
