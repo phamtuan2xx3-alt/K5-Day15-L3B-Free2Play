@@ -352,9 +352,9 @@ export function VivaStudyPanel({
   return (
     <div id="viva-chat-shell" className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-5">
       {/* Operate-mode Header matching AuditPanel & KnowledgeHubPanel */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="m-0 text-lg font-semibold tracking-tight text-foreground">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="m-0 text-base sm:text-lg font-semibold tracking-tight text-foreground break-words">
             Vấn đáp: {session.source_label}
           </h2>
           <p className="m-0 mt-0.5 text-xs text-muted-foreground">
@@ -363,15 +363,15 @@ export function VivaStudyPanel({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {session.mode === "team" && session.members.length >= 2 ? (
-            <div className="flex items-center gap-1.5">
-              <label htmlFor="viva-member-select" className="text-xs font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
+              <label htmlFor="viva-member-select" className="text-xs font-medium text-muted-foreground shrink-0">
                 Thành viên
               </label>
               <select
                 id="viva-member-select"
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
+                className="h-9 sm:h-8 flex-1 sm:flex-none min-w-0 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
                 value={selectedMember}
                 onChange={(e) => setSelectedMember(e.target.value)}
               >
@@ -388,18 +388,25 @@ export function VivaStudyPanel({
           )}
 
           {!hasConversation ? (
-            <Button type="button" size="sm" disabled={busyMode !== null} onClick={handleStartQuestion}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={busyMode !== null}
+              onClick={handleStartQuestion}
+              className="w-full sm:w-auto min-h-[40px] sm:min-h-0"
+            >
               <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
               Bắt đầu kiểm tra kiến thức
             </Button>
           ) : (
-            <>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
                 disabled={busyMode !== null}
                 onClick={() => void runChatAction("next", "", turns)}
+                className="flex-1 sm:flex-none min-h-[38px] sm:min-h-0"
               >
                 <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
                 Câu hỏi mới
@@ -414,11 +421,12 @@ export function VivaStudyPanel({
                   setStatusMsg(null);
                   setErrorMsg(null);
                 }}
+                className="flex-1 sm:flex-none min-h-[38px] sm:min-h-0"
               >
                 <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
                 Làm mới chat
               </Button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -697,7 +705,7 @@ export function VivaStudyPanel({
                 : 'Nhập câu trả lời (kèm file:Lxx) hoặc nhắn "giải thích giúp mình"...'
             }
           />
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2.5 pt-1">
+          <div className="flex flex-col items-stretch gap-2 px-3 pb-2.5 pt-1 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-[11px] text-muted-foreground">
               {turns.length === 0
                 ? "Gửi trực tiếp để AI hỏi theo chủ đề bạn nhập"
@@ -707,7 +715,7 @@ export function VivaStudyPanel({
               type="submit"
               size="sm"
               disabled={busyMode !== null || !answerText.trim()}
-              className="h-8 rounded-lg px-3"
+              className="w-full sm:w-auto min-h-[40px] sm:min-h-0 sm:h-8 rounded-lg px-3"
             >
               <Send aria-hidden="true" className="h-3.5 w-3.5" />
               Gửi trả lời

@@ -191,13 +191,14 @@ export function KnowledgeHubPanel({
       </div>
 
       {/* Bloom Summary & Filter Pills + Repo Filter */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc theo mức Bloom">
+      <div className="flex flex-col items-stretch gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 gap-1.5 w-full sm:flex sm:flex-wrap sm:w-auto" role="group" aria-label="Lọc theo mức Bloom">
           <Button
             type="button"
             size="sm"
             variant={levelFilter === "all" ? "default" : "secondary"}
             onClick={() => setLevelFilter("all")}
+            className="justify-center min-h-[38px] sm:min-h-0"
           >
             Tất cả ({counts.total})
           </Button>
@@ -206,6 +207,7 @@ export function KnowledgeHubPanel({
             size="sm"
             variant={levelFilter === "weak" ? "default" : "secondary"}
             onClick={() => setLevelFilter("weak")}
+            className="justify-center min-h-[38px] sm:min-h-0"
           >
             Cần ôn L0–L2 ({counts.weak})
           </Button>
@@ -214,6 +216,7 @@ export function KnowledgeHubPanel({
             size="sm"
             variant={levelFilter === "growing" ? "default" : "secondary"}
             onClick={() => setLevelFilter("growing")}
+            className="justify-center min-h-[38px] sm:min-h-0"
           >
             Đang nắm L3–L4 ({counts.growing})
           </Button>
@@ -222,18 +225,19 @@ export function KnowledgeHubPanel({
             size="sm"
             variant={levelFilter === "mastered" ? "default" : "secondary"}
             onClick={() => setLevelFilter("mastered")}
+            className="justify-center min-h-[38px] sm:min-h-0"
           >
             Đã vững L5–L6 ({counts.mastered})
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label htmlFor="knowledge-repo-filter" className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <label htmlFor="knowledge-repo-filter" className="text-xs font-medium text-muted-foreground shrink-0">
             Nguồn repo
           </label>
           <select
             id="knowledge-repo-filter"
-            className="h-8 max-w-[260px] rounded-md border border-input bg-background px-2 text-xs text-foreground"
+            className="h-9 sm:h-8 flex-1 sm:flex-none w-full sm:w-auto sm:max-w-[260px] rounded-md border border-input bg-background px-2 text-xs text-foreground"
             value={repoFilter}
             onChange={(e) => setRepoFilter(e.target.value)}
           >
@@ -250,7 +254,7 @@ export function KnowledgeHubPanel({
       {/* Integrated Export All Section */}
       <Card className="bg-card shadow-none">
         <CardContent className="p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div>
               <h3 className="m-0 text-sm font-semibold text-foreground">Xuất toàn bộ kiến thức</h3>
               <p className="m-0 text-xs text-muted-foreground">{activeMeta.desc}</p>
@@ -258,14 +262,14 @@ export function KnowledgeHubPanel({
             <a
               href={downloadHref}
               download={filename || undefined}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-500/10 px-3.5 text-sm font-medium text-emerald-800 no-underline hover:bg-emerald-500/15 dark:border-emerald-400/40 dark:text-emerald-300 transition-colors"
+              className="inline-flex h-10 sm:h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-emerald-700/35 bg-emerald-500/10 px-3.5 text-sm font-medium text-emerald-800 no-underline hover:bg-emerald-500/15 dark:border-emerald-400/40 dark:text-emerald-300 transition-colors"
             >
               <Download aria-hidden="true" className="h-3.5 w-3.5" />
               Tải tất cả ({activeMeta.ext})
             </a>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Chọn định dạng xuất">
+          <div className="grid grid-cols-2 gap-1.5 w-full sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:w-auto" role="group" aria-label="Chọn định dạng xuất">
             {FORMAT_META.map((item) => (
               <Button
                 key={item.fmt}
@@ -274,6 +278,7 @@ export function KnowledgeHubPanel({
                 variant={selectedFmt === item.fmt ? "default" : "secondary"}
                 onClick={() => void handlePreview(item.fmt)}
                 disabled={exportLoading}
+                className="justify-center min-h-[38px] sm:min-h-0"
               >
                 {item.label}
               </Button>
@@ -388,6 +393,7 @@ export function KnowledgeHubPanel({
                     size="sm"
                     variant="secondary"
                     onClick={() => onDrillConcept(c)}
+                    className="flex-1 sm:flex-none justify-center min-h-[38px] sm:min-h-0"
                   >
                     <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
                     Ôn lại trong Vấn đáp
@@ -398,6 +404,7 @@ export function KnowledgeHubPanel({
                     variant="outline"
                     disabled={busyKey === c.concept_key}
                     onClick={() => void handleToggleStatus(c)}
+                    className="flex-1 sm:flex-none justify-center min-h-[38px] sm:min-h-0"
                   >
                     <Check aria-hidden="true" className="h-3.5 w-3.5" />
                     {c.status === "mastered" ? "Chuyển sang Cần ôn" : "Đánh dấu Đã hiểu"}

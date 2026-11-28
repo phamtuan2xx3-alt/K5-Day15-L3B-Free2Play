@@ -57,6 +57,7 @@ export function App() {
   const [needsAuth, setNeedsAuth] = useState(false);
 
   const [activeTab, setActiveTab] = useState<TabId>("audit");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem("repoksv-sidebar-collapsed") === "1";
@@ -97,6 +98,7 @@ export function App() {
   });
 
   const navigate = useCallback((nextPath: string) => {
+    setMobileNavOpen(false);
     if (window.location.pathname !== nextPath) {
       window.history.pushState(null, "", nextPath);
       setPathname(nextPath);
@@ -108,6 +110,17 @@ export function App() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   const refreshSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -126,6 +139,7 @@ export function App() {
   }, []);
 
   const handleSelectSession = useCallback(async (scanId: string) => {
+    setMobileNavOpen(false);
     setGlobalError(null);
     try {
       const detail = await getSession(scanId);
@@ -384,15 +398,15 @@ export function App() {
   const isLegalRoute = pathname === "/login" || pathname === "/privacy" || pathname === "/terms";
 
   const footerNode = (
-    <footer className="border-t border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground sm:px-6">
-      <div className="mx-auto flex w-full max-w-[1040px] flex-wrap items-center justify-between gap-3">
+    <footer className="border-t border-border bg-card/60 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] text-xs text-muted-foreground sm:px-6 sm:py-3">
+      <div className="mx-auto flex w-full max-w-[1040px] flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <span>RepoKSV · Giám khảo ảo AI20K (Nhóm Free2Play · NO-AUTO-GRADE)</span>
         <nav aria-label="Liên kết pháp lý">
-          <ul className="m-0 flex list-none gap-4 p-0">
+          <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
             <li>
               <a
                 href="/privacy"
-                className="text-primary hover:underline"
+                className="inline-flex items-center py-1 text-primary hover:underline"
                 onClick={(e) => {
                   e.preventDefault();
                   navigate("/privacy");
@@ -404,7 +418,7 @@ export function App() {
             <li>
               <a
                 href="/terms"
-                className="text-primary hover:underline"
+                className="inline-flex items-center py-1 text-primary hover:underline"
                 onClick={(e) => {
                   e.preventDefault();
                   navigate("/terms");
@@ -416,7 +430,7 @@ export function App() {
             <li>
               <a
                 href="/login"
-                className="text-primary hover:underline"
+                className="inline-flex items-center py-1 text-primary hover:underline"
                 onClick={(e) => {
                   e.preventDefault();
                   navigate("/login");
@@ -435,8 +449,8 @@ export function App() {
     <div
       className={
         isLegalRoute
-          ? "flex min-h-screen flex-col bg-background text-foreground"
-          : "flex min-h-screen flex-col bg-background text-foreground lg:h-screen lg:overflow-hidden"
+          ? "flex min-h-dvh flex-col bg-background text-foreground"
+          : "flex min-h-dvh flex-col bg-background text-foreground lg:h-dvh lg:overflow-hidden"
       }
     >
       {isLegalRoute ? (
@@ -473,9 +487,11 @@ export function App() {
             onNavigate={navigate}
             collapsed={sidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapsed}
+            mobileOpen={mobileNavOpen}
+            onCloseMobile={() => setMobileNavOpen(false)}
           />
 
-          <div className="order-first lg:order-last flex min-w-0 flex-col bg-background lg:min-h-0 lg:overflow-hidden">
+          <div className="flex min-w-0 flex-col bg-background lg:min-h-0 lg:overflow-hidden">
             <TopBar
               targetInput={targetInput}
               onTargetInputChange={setTargetInput}
@@ -483,6 +499,7 @@ export function App() {
               scanning={scanning}
               onScan={(t, force) => void handleScan(t, force)}
               onNavigate={navigate}
+              onOpenMobileMenu={() => setMobileNavOpen(true)}
             />
 
             <div
@@ -548,7 +565,7 @@ export function App() {
                       <div
                         role="tablist"
                         aria-label="Khu vực làm việc RepoKSV"
-                        className="inline-flex max-w-full overflow-x-auto items-center gap-1 rounded-lg border border-border bg-muted/70 p-1"
+                        className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-muted/70 p-1 sm:inline-flex sm:w-auto"
                         onKeyDown={handleTabKeyDown}
                       >
                         {TABS.map((tab) => {

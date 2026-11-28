@@ -97,20 +97,22 @@ function ChecksGrid({
 }) {
   return (
     <div
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-4"
       role="region"
       aria-label="4 lớp kiểm tra GitHub Live Guard"
     >
       {checks.map((chk) => (
         <Card key={chk.key} className="status-card bg-card shadow-none">
-          <CardHeader className="flex-row items-center justify-between gap-2 p-3 pb-1.5">
-            <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-foreground">
+          <CardHeader className="flex-row items-center justify-between gap-1.5 p-2.5 pb-1 sm:p-3 sm:pb-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[11px] sm:text-xs font-semibold text-foreground truncate">
               <StatusIcon status={chk.status} />
-              {chk.label || chk.key}
+              <span className="truncate">{chk.label || chk.key}</span>
             </span>
-            <Badge variant={statusVariant(chk.status)}>{statusLabel(chk.status)}</Badge>
+            <Badge variant={statusVariant(chk.status)} className="shrink-0">
+              {statusLabel(chk.status)}
+            </Badge>
           </CardHeader>
-          <CardContent className="p-3 pt-0 text-xs text-muted-foreground leading-relaxed">
+          <CardContent className="p-2.5 pt-0 sm:p-3 sm:pt-0 text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
             <InlineMarkdown text={chk.detail} onSelectCite={onSelectCite} />
           </CardContent>
         </Card>
@@ -363,8 +365,8 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
     <div className="tabpanel-inner mx-auto w-full max-w-[1040px] space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="m-0 text-lg font-semibold tracking-tight text-foreground">
+        <div className="min-w-0">
+          <h2 className="m-0 text-base sm:text-lg font-semibold tracking-tight text-foreground break-words">
             Hồ sơ kiểm toán: {session.source_label}
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -376,7 +378,7 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
                 Commit: <code className="font-mono">{session.commit_sha.slice(0, 7)}</code>
               </span>
             ) : null}
-            <span>
+            <span className="break-all text-[11px] sm:text-xs">
               Phiên: <code className="font-mono">{session.scan_id}</code>
             </span>
           </div>
@@ -403,14 +405,14 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
 
       {/* Segmented Sub-tabs for easier scanning */}
       <div
-        className="flex flex-wrap items-center gap-2 border-b border-border pb-3"
+        className="grid grid-cols-2 gap-1.5 border-b border-border pb-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2"
         role="group"
         aria-label="Phân mục báo cáo kiểm toán"
       >
         <Button
           type="button"
           size="sm"
-          className="h-8 inline-flex items-center gap-1.5"
+          className="h-auto min-h-[38px] py-1.5 px-2 text-xs whitespace-normal text-center leading-tight sm:h-8 sm:min-h-0 sm:px-3 sm:whitespace-nowrap inline-flex items-center justify-center gap-1.5"
           variant={subTab === "sec1" ? "default" : "secondary"}
           onClick={() => setSubTab("sec1")}
         >
@@ -432,7 +434,7 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
         <Button
           type="button"
           size="sm"
-          className="h-8"
+          className="h-auto min-h-[38px] py-1.5 px-2 text-xs whitespace-normal text-center leading-tight sm:h-8 sm:min-h-0 sm:px-3 sm:whitespace-nowrap"
           variant={subTab === "sec2" ? "default" : "secondary"}
           onClick={() => setSubTab("sec2")}
         >
@@ -442,7 +444,7 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
         <Button
           type="button"
           size="sm"
-          className="h-8"
+          className="h-auto min-h-[38px] py-1.5 px-2 text-xs whitespace-normal text-center leading-tight sm:h-8 sm:min-h-0 sm:px-3 sm:whitespace-nowrap"
           variant={subTab === "sec3" ? "default" : "secondary"}
           onClick={() => setSubTab("sec3")}
         >
@@ -452,7 +454,7 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
         <Button
           type="button"
           size="sm"
-          className="h-8"
+          className="h-auto min-h-[38px] py-1.5 px-2 text-xs whitespace-normal text-center leading-tight sm:h-8 sm:min-h-0 sm:px-3 sm:whitespace-nowrap"
           variant={subTab === "all" ? "default" : "outline"}
           onClick={() => setSubTab("all")}
         >
@@ -533,7 +535,11 @@ export function AuditPanel({ session, diff, onSelectCite, onGoToViva }: AuditPan
                 Câu hỏi phản biện đã được chuyển sang tab Vấn đáp để bạn trả lời từng câu và nâng bậc kiến thức.
               </p>
             </div>
-            <Button type="button" onClick={() => onGoToViva(parsed.vivaQuestions)}>
+            <Button
+              type="button"
+              onClick={() => onGoToViva(parsed.vivaQuestions)}
+              className="w-full sm:w-auto justify-center"
+            >
               <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
               {parsed.vivaQuestions.length > 0
                 ? `Chuyển sang Vấn đáp (${parsed.vivaQuestions.length} câu gợi ý)`
