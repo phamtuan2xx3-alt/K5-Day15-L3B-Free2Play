@@ -41,19 +41,37 @@ API_KEY = (os.environ.get("API_KEY") or "").strip()
 API_BASE_URL = (os.environ.get("API_BASE_URL") or "").strip()
 
 URL_OPENAI = "https://api.openai.com/v1/chat/completions"
+URL_VILAO = "https://api.vilao.ai/v1/chat/completions"
 URL_DEEPSEEK = "https://api.deepseek.com/chat/completions"
 URL_CLAUDE = "https://api.anthropic.com/v1/messages"
 URL_GEMINI_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
 URL_OLLAMA = "http://localhost:11434/api/chat"
+USER_AGENT = "RepoKSV-Auditor/1.0"
+
+
+def normalize_vilao_url(base_url: str | None) -> str:
+    """Chuẩn hoá API_BASE_URL cho Vilao (tự nối /chat/completions nếu kết thúc bằng /v1 hoặc /v1/)."""
+    raw = (base_url or "").strip()
+    if not raw:
+        return URL_VILAO
+    stripped = raw.rstrip("/")
+    if stripped.endswith("/v1"):
+        return stripped + "/chat/completions"
+    return raw
 
 
 def post_json(url: str, headers: dict, body: dict, timeout: int = 60) -> dict:
     """Gửi POST JSON, trả về JSON phản hồi. Chỉ dùng thư viện chuẩn (urllib)."""
+    req_headers = {
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+    req_headers.update(headers)
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         method="POST",
-        headers=dict({"Content-Type": "application/json"}, **headers),
+        headers=req_headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -66,29 +84,171 @@ def post_json(url: str, headers: dict, body: dict, timeout: int = 60) -> dict:
     return data
 
 
-def call_openai(system: str, user: str, model_name: str, url: str | None = None) -> dict:
-    """Gọi OpenAI Chat Completions API hoặc endpoint tương thích OpenAI."""
-    endpoint = url or API_BASE_URL or URL_OPENAI
-    messages = ([{"role": "system", "content": system}] if system else []) + [
-        {"role": "user", "content": user}
-    ]
-    data = post_json(
-        endpoint,
-        {"Authorization": "Bearer " + API_KEY},
-        {"model": model_name, "messages": messages},
-    )
-    u = data.get("usage") or {}
-    content = data["choices"][0]["message"].get("content") or ""
+def post_sse_openai(
+    url: str,
+    headers: dict,
+    body: dict,
+    on_delta,
+    timeout: int = 120,
+) -> dict:
+    """Gửi POST streaming SSE chuẩn OpenAI/Vilao, phát delta ('reasoning'|'content') và thu usage cuối."""
+    req_headers = {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "User-Agent": USER_AGENT,
+    }
+    req_headers.update(headers)
+
+    def _open_stream(payload: dict):
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers=req_headers,
+        )
+        return urllib.request.urlopen(req, timeout=timeout)
+
+    stream_payload = dict(body)
+    stream_payload["stream"] = True
+    stream_payload["stream_options"] = {"include_usage": True}
+
+    try:
+        resp = _open_stream(stream_payload)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 400 and "stream_options" in stream_payload:
+            fallback_payload = dict(body)
+            fallback_payload["stream"] = True
+            try:
+                resp = _open_stream(fallback_payload)
+            except urllib.error.HTTPError as e2:
+                err_body2 = e2.read().decode("utf-8", "replace")[:300]
+                raise RuntimeError("HTTP %d: %s" % (e2.code, err_body2))
+        else:
+            raise RuntimeError("HTTP %d: %s" % (e.code, err_body))
+
+    reasoning_parts: list[str] = []
+    content_parts: list[str] = []
+    last_usage: dict | None = None
+
+    with resp:
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        if "application/json" in ctype:
+            data = json.loads(resp.read().decode("utf-8"))
+            tokens_in, tokens_out = _extract_openai_tokens(data.get("usage") or {})
+            choices = data.get("choices") or []
+            content = ((choices[0].get("message") or {}).get("content") or "") if choices else ""
+            if callable(on_delta) and content:
+                on_delta("content", content)
+            return {
+                "text": content,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
+            }
+
+        for raw_line in resp:
+            line = raw_line.decode("utf-8", "replace").strip()
+            if not line or line.startswith(":"):
+                continue
+            if not line.startswith("data:"):
+                continue
+            data_str = line[5:].strip()
+            if data_str == "[DONE]":
+                break
+            try:
+                obj = json.loads(data_str)
+            except ValueError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("usage"):
+                last_usage = obj["usage"]
+            for ch in obj.get("choices") or []:
+                if not isinstance(ch, dict):
+                    continue
+                delta = ch.get("delta") or {}
+                if not isinstance(delta, dict):
+                    continue
+                r_chunk = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                if r_chunk:
+                    reasoning_parts.append(r_chunk)
+                    if callable(on_delta):
+                        on_delta("reasoning", r_chunk)
+                c_chunk = delta.get("content") or ""
+                if c_chunk:
+                    content_parts.append(c_chunk)
+                    if callable(on_delta):
+                        on_delta("content", c_chunk)
+
+    tokens_in, tokens_out = _extract_openai_tokens(last_usage or {})
     return {
-        "text": content,
-        "tokens_in": int(u.get("prompt_tokens") or 0),
-        "tokens_out": int(u.get("completion_tokens") or 0),
+        "text": "".join(content_parts),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
     }
 
 
-def call_deepseek(system: str, user: str, model_name: str) -> dict:
+def _extract_openai_tokens(usage: dict) -> tuple[int, int]:
+    """Đọc tokens_in và tokens_out từ usage chuẩn OpenAI/Vilao, cộng thêm reasoning_tokens nếu có."""
+    u = usage or {}
+    tokens_in = int(u.get("prompt_tokens") or 0)
+    completion_tokens = int(u.get("completion_tokens") or 0)
+    details = u.get("completion_tokens_details") or {}
+    reasoning_tokens = int(details.get("reasoning_tokens") or 0) if isinstance(details, dict) else 0
+    return tokens_in, completion_tokens + reasoning_tokens
+
+
+def call_openai(
+    system: str,
+    user: str,
+    model_name: str,
+    url: str | None = None,
+    api_key: str | None = None,
+    on_delta=None,
+) -> dict:
+    """Gọi OpenAI Chat Completions API hoặc endpoint tương thích OpenAI (hỗ trợ SSE khi có on_delta)."""
+    endpoint = url or API_BASE_URL or URL_OPENAI
+    key = API_KEY if api_key is None else api_key
+    messages = ([{"role": "system", "content": system}] if system else []) + [
+        {"role": "user", "content": user}
+    ]
+    if on_delta is not None:
+        return post_sse_openai(
+            endpoint,
+            {"Authorization": "Bearer " + key},
+            {"model": model_name, "messages": messages},
+            on_delta=on_delta,
+        )
+    data = post_json(
+        endpoint,
+        {"Authorization": "Bearer " + key},
+        {"model": model_name, "messages": messages},
+    )
+    tokens_in, tokens_out = _extract_openai_tokens(data.get("usage") or {})
+    content = data["choices"][0]["message"].get("content") or ""
+    return {
+        "text": content,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+    }
+
+
+def call_vilao(system: str, user: str, model_name: str, on_delta=None) -> dict:
+    """Gọi Vilao API (tương thích OpenAI Chat Completions)."""
+    endpoint = normalize_vilao_url(API_BASE_URL)
+    key = API_KEY or (os.environ.get("VILAO_API_KEY") or "").strip()
+    return call_openai(system, user, model_name, url=endpoint, api_key=key, on_delta=on_delta)
+
+
+def call_deepseek(system: str, user: str, model_name: str, on_delta=None) -> dict:
     """Gọi DeepSeek API (tương thích định dạng OpenAI)."""
-    return call_openai(system, user, model_name, url=API_BASE_URL or URL_DEEPSEEK)
+    return call_openai(
+        system,
+        user,
+        model_name,
+        url=API_BASE_URL or URL_DEEPSEEK,
+        on_delta=on_delta,
+    )
 
 
 def call_claude(system: str, user: str, model_name: str) -> dict:
@@ -170,12 +330,15 @@ def call_ollama(system: str, user: str, model_name: str) -> dict:
 
 
 @model_call
-def call_model(system: str, user: str, model: str | None = None) -> dict:
+def call_model(system: str, user: str, model: str | None = None, *, on_delta=None) -> dict:
     """Gọi model theo MODEL_PROVIDER trong .env (hoặc chế độ fake nếu chưa cấu hình)."""
     if MODEL_PROVIDER == "fake":
         last = (user.strip().splitlines() or [""])[-1]
+        fake_text = "[câu trả lời giả — chưa nối model] " + last[:60]
+        if callable(on_delta) and fake_text:
+            on_delta("content", fake_text)
         return {
-            "text": "[câu trả lời giả — chưa nối model] " + last[:60],
+            "text": fake_text,
             "model": "fake",
             "tokens_in": 0,
             "tokens_out": 0,
@@ -185,25 +348,37 @@ def call_model(system: str, user: str, model: str | None = None) -> dict:
     if not target_model:
         raise ValueError("Thiếu MODEL_NAME trong .env (xem docs/connect-model.md).")
 
-    if MODEL_PROVIDER in ("openai", "deepseek", "anthropic", "gemini") and not API_KEY:
+    effective_key = API_KEY
+    if MODEL_PROVIDER == "vilao":
+        effective_key = API_KEY or (os.environ.get("VILAO_API_KEY") or "").strip()
+
+    if MODEL_PROVIDER in ("openai", "vilao", "deepseek", "anthropic", "gemini") and not effective_key:
         raise ValueError(
             "Thiếu API_KEY trong .env cho MODEL_PROVIDER=%s (xem docs/connect-model.md)."
             % MODEL_PROVIDER
         )
 
     if MODEL_PROVIDER == "openai":
-        r = call_openai(system, user, target_model)
+        r = call_openai(system, user, target_model, on_delta=on_delta)
+    elif MODEL_PROVIDER == "vilao":
+        r = call_vilao(system, user, target_model, on_delta=on_delta)
     elif MODEL_PROVIDER == "deepseek":
-        r = call_deepseek(system, user, target_model)
+        r = call_deepseek(system, user, target_model, on_delta=on_delta)
     elif MODEL_PROVIDER == "anthropic":
         r = call_claude(system, user, target_model)
+        if callable(on_delta) and r.get("text"):
+            on_delta("content", str(r["text"]))
     elif MODEL_PROVIDER == "gemini":
         r = call_gemini(system, user, target_model)
+        if callable(on_delta) and r.get("text"):
+            on_delta("content", str(r["text"]))
     elif MODEL_PROVIDER == "ollama":
         r = call_ollama(system, user, target_model)
+        if callable(on_delta) and r.get("text"):
+            on_delta("content", str(r["text"]))
     else:
         raise ValueError(
-            "MODEL_PROVIDER=%r không được hỗ trợ. Chọn: fake, openai, gemini, anthropic, deepseek, ollama."
+            "MODEL_PROVIDER=%r không được hỗ trợ. Chọn: fake, openai, vilao, gemini, anthropic, deepseek, ollama."
             % MODEL_PROVIDER
         )
 

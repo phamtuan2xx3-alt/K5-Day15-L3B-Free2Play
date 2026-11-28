@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#FFFFFF"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#DCE2EC" stroke-width="1.5"/>
+  <!-- Left vertical stem of K -->
+  <path d="M16 12h9v40h-9z" fill="#1B365D"/>
+  <!-- Upper arm of K -->
+  <path d="M27.5 27.5L41.5 12H52L34 30.5z" fill="#1B365D"/>
+  <!-- Lower leg of K -->
+  <path d="M34 33.5L52 52H41.5L27.5 36.5z" fill="#1B365D"/>
+  <!-- White diamond backing around scan core -->
+  <path d="M27.5 22.5L36.5 32L27.5 41.5L18.5 32z" fill="#FFFFFF"/>
+  <!-- Crimson horizontal scan beam + center diamond -->
+  <path d="M5 32l4.5-2 6.5 1v2l-6.5 1z" fill="#9B2226"/>
+  <path d="M20.5 32l7-4.5 7 4.5-7 4.5z" fill="#9B2226"/>
+  <path d="M34.5 31L54.5 30l4.5 2-4.5 2-20-1z" fill="#9B2226"/>
+</svg>

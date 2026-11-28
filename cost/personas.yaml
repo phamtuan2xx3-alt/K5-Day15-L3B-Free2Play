@@ -34,15 +34,15 @@ personas:           # ≥3 kiểu người dùng; share cộng lại = 1
 # Mỗi lượt lấy ngẫu nhiên một đầu vào trong eval/benchmark.csv (type thuong và kho).
 
 prices:             # USD / 1 triệu token — từ further-reading/model-prices.md của repo đề (BTC tra 25/11/2026). ≥2 mức model
-                    # Đổi theo model nhóm dùng thật ở lượt 2: chi phí / task thành công phải dùng CÙNG model với tỉ lệ đạt.
-  - model: gemini-3.1-flash-lite
-    input: 0.25
-    output: 1.50
-    source: "https://ai.google.dev/gemini-api/docs/pricing · tầng Nhỏ · theo bảng giá BTC xem 25/11/2026"
-  - model: gemini-4-hydrogen
-    input: 1.50
-    output: 7.50
-    source: "https://ai.google.dev/gemini-api/docs/pricing · tầng Lớn · theo bảng giá BTC xem 25/11/2026"
+                    # 28/11 14:20: đổi sang giá của model đo thật (deepseek flash) + 1 mức mạnh. Đổi theo model nhóm dùng thật ở lượt 2: chi phí / task thành công phải dùng CÙNG model với tỉ lệ đạt.
+  - model: deepseek-flash
+    input: 0.30
+    output: 1.20
+    source: "https://api-docs.deepseek.com/quick_start/pricing · tầng Nhỏ (giờ cao điểm) · theo further-reading/model-prices.md, BTC xem 25/11/2026 · cùng họ model đo token (deepseek-v4.1-flash qua Vilao)"
+  - model: gpt-6.2-sol
+    input: 2.00
+    output: 10.00
+    source: "OpenAI bảng Standard · tầng Lớn · theo further-reading/model-prices.md, BTC xem 25/11/2026 · mức model mạnh để so sánh"
 
 usd_to_vnd:         # tuỳ chọn: điền thì bản tóm tắt in thêm tiền Việt
   rate:

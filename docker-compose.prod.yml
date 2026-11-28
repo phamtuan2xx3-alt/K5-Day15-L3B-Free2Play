@@ -1,0 +1,59 @@
+# Production stack cho AWS VPS (2vCPU / 4GB RAM):
+# - Chạy sau Cloudflare Proxy / Caddy TLS:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile caddy up -d --build
+# - Hoặc ẩn 100% IP VPS với Cloudflare Tunnel (không cần mở cổng 80/443):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile tunnel up -d --build
+services:
+  repoksv:
+    container_name: repoksv-app
+    ports: !reset []
+    environment:
+      REPOKSV_DB_PATH: /app/.study_logs/repoksv.db
+      ALLOW_GUEST_DEMO: ${ALLOW_GUEST_DEMO:-false}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.16.0.0/12,10.0.0.0/8,127.0.0.1/32,::1/128}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://repoksv.tuanpq.com}
+      ORIGIN_SHARED_SECRET: ${ORIGIN_SHARED_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://repoksv.tuanpq.com/auth/google/callback}
+    mem_limit: 2g
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: repoksv-caddy
+    profiles: ["caddy"]
+    depends_on:
+      repoksv:
+        condition: service_healthy
+    environment:
+      REPOKSV_DOMAIN: ${REPOKSV_DOMAIN:-api-repoksv.tuanpq.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: repoksv-tunnel
+    profiles: ["tunnel"]
+    depends_on:
+      repoksv:
+        condition: service_healthy
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

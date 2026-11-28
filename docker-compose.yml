@@ -1,0 +1,28 @@
+services:
+  repoksv:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: repoksv-local
+    env_file:
+      - .env
+    environment:
+      REPOKSV_DB_PATH: /app/.study_logs/repoksv.db
+      ALLOW_GUEST_DEMO: ${ALLOW_GUEST_DEMO:-true}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    ports:
+      - "127.0.0.1:${REPOKSV_PORT:-8080}:8000"
+    volumes:
+      - repoksv_data:/app/.study_logs
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+volumes:
+  repoksv_data:

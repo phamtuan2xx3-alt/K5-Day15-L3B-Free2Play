@@ -8,35 +8,35 @@
 
 | Lượt | Run ID | Đạt / tổng | % | thuong | kho | tu_choi | So với chuẩn "đạt" |
 |---|---|---|---|---|---|---|---|
-| 1 | | __/__ | | __/__ | __/__ | __/__ | đạt / chưa |
-| 2 | | __/__ | | __/__ | __/__ | __/__ | đạt / chưa |
+| 1 | `run-1@20261128-103540` | 29/30 | 97% | 13/13 | 11/12 | 5/5 | **đạt** (≥80% tổng · 100% lỗi cứng · 100% `tu_choi` · 100% bài sạch S01/S08/S21/S29) |
+| 2 | *(đang chạy, bắt đầu 14:18 28/11 — chưa có số tại CP4 14:30; ghi vào đây khi xong, không sửa dòng lượt 1)* | | | | | | |
 
-Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`.
+Model: `deepseek-v4.1-flash` (qua Vilao API, OpenAI-compatible). Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`. Số lượt 1 chạy lại được bằng `python run.py score eval/run-1.csv`.
 
 ## 2. Lỗi lượt 1 — gom thành nhóm có tên
 
 | Nhóm lỗi | Số câu | Câu |
 |---|---|---|
-| vd: bịa nguồn *(ví dụ)* | | |
-| vd: đoán khi thiếu thông tin *(ví dụ)* | | |
-| | | |
+| **Xếp sai mức nghiêm trọng** (lỗi thiếu file G10 bị đẩy xuống sau lỗi nhẹ) | 1 trượt | `S12` |
+| **Bộ lọc hậu kiểm NO-AUTO-GRADE bắt nhầm** (cụm số dạng `42/100` không phải điểm) | 1 (vẫn đạt, có khiếm khuyết) | `S21` |
+| **Gợi ý ID lỗi thời** (danh sách ID hợp lệ chỉ tới S15 trong khi bộ câu đã tới S30) | 1 (vẫn đạt, có khiếm khuyết) | `S23` |
 
-**≥3 lỗi cụ thể:**
+**≥3 lỗi cụ thể** (trích từ `eval/run-1.csv`, cột `ghi_chu` do người chấm ghi):
 
 | Câu | Input | Output | Vì sao sai |
 |---|---|---|---|
-| | | | |
-| | | | |
-| | | | |
+| `S12` (kho) | `SUBMISSION_ID: S12` — hồ sơ vừa lệch số liệu vừa thiếu `metric_spec.yaml` | Nêu đủ cả hai lỗi nhưng đặt phần thiếu `metric_spec.yaml` xuống cuối mục (3), sau các lỗi nhẹ | Tiêu chí yêu cầu lỗi trừ điểm nặng / thiếu file xếp trước lỗi nhẹ; học viên đọc lướt dễ bỏ sót lỗi đắt nhất → **trượt** |
+| `S21` (kho) | `SUBMISSION_ID: S21` — bài sạch | Báo cáo đúng (0 cờ giả), nhưng ghi chú hậu kiểm NO-AUTO-GRADE gắn nhầm cụm `'42/100 review'` là câu tự chấm điểm | Bộ lọc regex quá rộng → báo động giả, làm học viên nghi ngờ bài sạch |
+| `S23` (kho) | `SUBMISSION_ID: S99` — ID không tồn tại | Báo G10 đúng, nhưng gợi ý "ID hợp lệ: S01–S09, S11–S15" | Danh sách gợi ý chưa cập nhật tới S30 → hướng dẫn sai cho người dùng |
 
 ## 3. Một lần cải tiến
 
-- Nhắm vào nhóm lỗi: __ — vì sao là nhóm **đau nhất với người dùng**: __
-- Đã sửa gì (có thể vài thay đổi cùng nhắm nhóm lỗi đó): __
-- Kết quả: nhóm lỗi đó __/__ → __/__ · tổng __% → __%
-- Câu nào **tệ đi** sau khi sửa: __
+- Nhắm vào nhóm lỗi: **xếp sai mức nghiêm trọng** — vì sao là nhóm **đau nhất với người dùng**: đây là câu trượt duy nhất, và lỗi thiếu file / trừ điểm nặng bị chìm dưới lỗi nhẹ là kiểu sai khiến học viên nộp bài vẫn thiếu file (0đ khối) dù AI "có nói" — đúng pain 9/25 (36%) nộp sót file / sai format ở khảo sát.
+- Đã sửa gì (commit `bc24bf0`, Phạm Quang Tuấn, sau lượt 1): (1) prompt ép báo `CHƯA KIỂM ĐƯỢC (G10) — Thiếu file bắt buộc` ở **đầu mục (1)** trước mọi lỗi nhẹ (`codebase/agent.py` luật 3 và 6); kèm hai sửa nhỏ cùng đợt: (2) thu hẹp bộ lọc NO-AUTO-GRADE (S21), (3) cập nhật gợi ý ID S01–S30 (S23). Không đổi chuẩn "đạt", không đổi bộ câu thử, không so khớp input của câu thử.
+- Kết quả: nhóm lỗi đó 0/1 → *(chờ lượt 2)* · tổng 97% → *(chờ lượt 2)*
+- Câu nào **tệ đi** sau khi sửa: *(chờ lượt 2 — chạy trọn bộ 30 câu)*
 
 ## 4. Còn lại
 
-- Lỗi chưa sửa + nguy hiểm thế nào: __
-- Nếu có thêm 1 tuần: __
+- Lỗi chưa sửa + nguy hiểm thế nào: mỗi câu mới chạy **1 lần** nên chưa biết thứ tự mức nghiêm trọng có ổn định không; chưa có phần held-out; bộ câu là hồ sơ giả lập (seed 42), chưa kiểm trên repo thật của học viên — PR nhầm repo gốc (pain lớn nhất, 52%) mới chỉ kiểm qua `meta.json` giả lập.
+- Nếu có thêm 1 tuần: chạy ≥3 lần mỗi câu + tách ~20% held-out; người dùng thử 2–3 nhóm thật (`validation/log.md`); kiểm GIT-FORK-PR trên dữ liệu PR thật của khoá.
