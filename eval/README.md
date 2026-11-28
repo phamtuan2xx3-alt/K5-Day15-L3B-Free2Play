@@ -37,7 +37,7 @@
 | Lượt | Run ID | Model | Cấu hình (prompt / công cụ / thay đổi) | Đạt / tổng | % | Đạt chuẩn? |
 |---|---|---|---|---|---|---|
 | 1 | `run-1@20261128-103540` | `deepseek-v4.1-flash` (Vilao) | Workflow 3 bước, 1 lượt gọi model / câu, prompt trước commit `bc24bf0` | 29/30 | 97% | Đạt |
-| 2 | *(đang chạy từ 14:18 28/11, chưa xong tại CP4)* | `deepseek-v4.1-flash` (Vilao) | + commit `bc24bf0`: ép báo G10 thiếu file đầu mục (1), thu hẹp lọc NO-AUTO-GRADE, gợi ý ID S01–S30 | — | — | — |
+| 2 | `run-2@20261128-141758` (xong sau CP4) | `deepseek-v4.1-flash` (Vilao) | + commit `bc24bf0`: ép báo G10 thiếu file đầu mục (1), thu hẹp lọc NO-AUTO-GRADE, gợi ý ID S01–S30 | 29/30 | 97% | Chưa — `S01` bài sạch bị báo nặng giả |
 
 Lượt chạy lại vì lỗi kỹ thuật, lượt sau CP4: ghi thêm dòng, không sửa dòng cũ.
 
@@ -45,4 +45,5 @@ Lượt chạy lại vì lỗi kỹ thuật, lượt sau CP4: ghi thêm dòng, k
 
 - **Xếp sai mức nghiêm trọng** (`S12`, câu trượt duy nhất lượt 1): lỗi thiếu file bị đẩy xuống sau lỗi nhẹ.
 - **Hậu kiểm NO-AUTO-GRADE bắt nhầm** (`S21`) và **gợi ý ID lỗi thời** (`S23`): không làm trượt câu nhưng gây báo động giả / hướng dẫn sai.
-- Chi tiết input · output · vì sao sai: `eval/report.md` mục 2.
+- **Lượt 2:** `S12` đã sửa, nhưng **`S01` (bài sạch) tệ đi** — bị gắn lỗi nặng giả cho link repo giả lập → hỏng vế 100% bài sạch.
+- Chi tiết input · output · vì sao sai: `eval/report.md` mục 2–3.

@@ -9,9 +9,9 @@
 | Lượt | Run ID | Đạt / tổng | % | thuong | kho | tu_choi | So với chuẩn "đạt" |
 |---|---|---|---|---|---|---|---|
 | 1 | `run-1@20261128-103540` | 29/30 | 97% | 13/13 | 11/12 | 5/5 | **đạt** (≥80% tổng · 100% lỗi cứng · 100% `tu_choi` · 100% bài sạch S01/S08/S21/S29) |
-| 2 | *(đang chạy, bắt đầu 14:18 28/11 — chưa có số tại CP4 14:30; ghi vào đây khi xong, không sửa dòng lượt 1)* | | | | | | |
+| 2 | `run-2@20261128-141758` | 29/30 | 97% | 12/13 | 12/12 | 5/5 | **chưa đạt** — vế "100% bài sạch" hỏng vì `S01` bị gắn lỗi nặng giả (các vế còn lại đạt) |
 
-Model: `deepseek-v4.1-flash` (qua Vilao API, OpenAI-compatible). Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`. Số lượt 1 chạy lại được bằng `python run.py score eval/run-1.csv`.
+Lượt 2 bắt đầu 14:18, chạy xong sau mốc CP4 14:30; cột `pass` do agent chấm nháp theo `pass_criterion` (ghi rõ trong `ghi_chu`), nhóm xác nhận lại. Model: `deepseek-v4.1-flash` (qua Vilao API, OpenAI-compatible). Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`. Số lượt 1 chạy lại được bằng `python run.py score eval/run-1.csv`.
 
 ## 2. Lỗi lượt 1 — gom thành nhóm có tên
 
@@ -33,10 +33,10 @@ Model: `deepseek-v4.1-flash` (qua Vilao API, OpenAI-compatible). Kết quả t�
 
 - Nhắm vào nhóm lỗi: **xếp sai mức nghiêm trọng** — vì sao là nhóm **đau nhất với người dùng**: đây là câu trượt duy nhất, và lỗi thiếu file / trừ điểm nặng bị chìm dưới lỗi nhẹ là kiểu sai khiến học viên nộp bài vẫn thiếu file (0đ khối) dù AI "có nói" — đúng pain 9/25 (36%) nộp sót file / sai format ở khảo sát.
 - Đã sửa gì (commit `bc24bf0`, Phạm Quang Tuấn, sau lượt 1): (1) prompt ép báo `CHƯA KIỂM ĐƯỢC (G10) — Thiếu file bắt buộc` ở **đầu mục (1)** trước mọi lỗi nhẹ (`codebase/agent.py` luật 3 và 6); kèm hai sửa nhỏ cùng đợt: (2) thu hẹp bộ lọc NO-AUTO-GRADE (S21), (3) cập nhật gợi ý ID S01–S30 (S23). Không đổi chuẩn "đạt", không đổi bộ câu thử, không so khớp input của câu thử.
-- Kết quả: nhóm lỗi đó 0/1 → *(chờ lượt 2)* · tổng 97% → *(chờ lượt 2)*
-- Câu nào **tệ đi** sau khi sửa: *(chờ lượt 2 — chạy trọn bộ 30 câu)*
+- Kết quả: nhóm lỗi đó **0/1 → 1/1** (`S12` đã báo G10 thiếu `metric_spec.yaml` ở đầu mục 1) · `S23` gợi ý đúng S01–S30 · tổng **97% → 97%** (29/30 → 29/30)
+- Câu nào **tệ đi** sau khi sửa: **`S01` (bài sạch, thuong)** — lượt 2 gắn "Lỗi nặng nhất (TEAMS-FORMAT + GIT-FORK-PR)" cho link repo giả lập `.example.invalid` (`TEAMS.md:L06`), trong khi `S08`, `S19` cùng loại link chỉ coi là cảnh báo nhẹ → báo nặng giả trên bài sạch, làm lượt 2 **hỏng vế 100% bài sạch** của chuẩn "đạt". Khả năng cao do luật mới "xếp lỗi nặng lên đầu" khiến model cố tìm một lỗi nặng để đặt lên đầu ngay cả khi bài sạch. Ngoài ra `S21` vẫn còn ghi chú hậu kiểm NO-AUTO-GRADE bắt nhầm "42/100 review" — phần sửa bộ lọc chưa có tác dụng.
 
 ## 4. Còn lại
 
-- Lỗi chưa sửa + nguy hiểm thế nào: mỗi câu mới chạy **1 lần** nên chưa biết thứ tự mức nghiêm trọng có ổn định không; chưa có phần held-out; bộ câu là hồ sơ giả lập (seed 42), chưa kiểm trên repo thật của học viên — PR nhầm repo gốc (pain lớn nhất, 52%) mới chỉ kiểm qua `meta.json` giả lập.
+- Lỗi chưa sửa + nguy hiểm thế nào: **báo nặng giả trên bài sạch (`S01`)** — nguy hiểm vì học viên có thể sửa hỏng bài đúng hoặc mất niềm tin vào công cụ; hướng sửa: chỉ cho nhãn "nặng" khi có cờ từ `scan_hard_rules`, và nói rõ "không có lỗi nặng" khi bộ quét trống. **Hậu kiểm NO-AUTO-GRADE bắt nhầm (`S21`)** — gây báo động giả. Ngoài ra, mỗi câu mới chạy **1 lần** nên chưa biết thứ tự mức nghiêm trọng có ổn định không; chưa có phần held-out; bộ câu là hồ sơ giả lập (seed 42), chưa kiểm trên repo thật của học viên — PR nhầm repo gốc (pain lớn nhất, 52%) mới chỉ kiểm qua `meta.json` giả lập.
 - Nếu có thêm 1 tuần: chạy ≥3 lần mỗi câu + tách ~20% held-out; người dùng thử 2–3 nhóm thật (`validation/log.md`); kiểm GIT-FORK-PR trên dữ liệu PR thật của khoá.
