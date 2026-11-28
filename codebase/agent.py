@@ -502,6 +502,13 @@ def _fake_viva_cards(
     ]
 
 
+def _invoke_model(system: str, prompt: str, on_delta=None) -> dict:
+    """Gọi call_model giữ nguyên chữ ký 2 tham số khi không stream (tương thích mock/test)."""
+    if on_delta is not None:
+        return call_model(system, prompt, on_delta=on_delta)
+    return call_model(system, prompt)
+
+
 def viva_ask(
     files_content: dict[str, str],
     *,
@@ -511,6 +518,7 @@ def viva_ask(
     bloom_summary: str = "",
     github_owner: str = "",
     line_counts: dict[str, int] | None = None,
+    on_delta=None,
 ) -> dict:
     """Sinh 3–5 thẻ câu hỏi phản biện Bloom gắn `file:Lxx` có thật cho thành viên (hoặc cá nhân)."""
     counts = line_counts or {k: len((v or "").splitlines()) for k, v in (files_content or {}).items()}
@@ -532,7 +540,7 @@ def viva_ask(
         f"<bloom_memory>\n{bloom_summary or '(Chưa có lịch sử Bloom)'}\n</bloom_memory>\n\n"
         f"{_build_viva_context_blob(files_content)}"
     )
-    reply = call_model(SYSTEM_VIVA_ASK, prompt)
+    reply = _invoke_model(SYSTEM_VIVA_ASK, prompt, on_delta=on_delta)
 
     if reply.get("model") == "fake":
         cards = _fake_viva_cards(resolved_member, member_tasks, anchors, topic, target_level)
@@ -666,6 +674,7 @@ def viva_defense(
     viva_meta: dict | None = None,
     github_owner: str = "",
     line_counts: dict[str, int] | None = None,
+    on_delta=None,
 ) -> dict:
     """Chẩn đoán thông hiểu Bloom L0–L6 có sandbox <user_answer> và trả bản nháp chờ duyệt (NO-AUTO-GRADE)."""
     counts = line_counts or {k: len((v or "").splitlines()) for k, v in (files_content or {}).items()}
@@ -736,7 +745,7 @@ def viva_defense(
         f"<user_answer>\n{safe_user_answer}\n</user_answer>\n\n"
         f"{_build_viva_context_blob(files_content)}"
     )
-    reply = call_model(SYSTEM_VIVA_DEFENSE, prompt)
+    reply = _invoke_model(SYSTEM_VIVA_DEFENSE, prompt, on_delta=on_delta)
 
     if reply.get("model") == "fake":
         diag = _heuristic_fake_defense(files_content, anchors, question, user_answer)
@@ -853,6 +862,7 @@ def viva_coach(
     save_draft: bool = True,
     github_owner: str = "",
     line_counts: dict[str, int] | None = None,
+    on_delta=None,
 ) -> dict:
     """Gợi mở 3 tầng (Tư duy -> Manh mối file:Lxx -> Khung tự trả lời), không làm hộ, kèm ghi log nháp an toàn."""
     counts = line_counts or {k: len((v or "").splitlines()) for k, v in (files_content or {}).items()}
@@ -872,7 +882,7 @@ def viva_coach(
         f"<bloom_memory>\n{bloom_summary or '(Chưa có lịch sử Bloom)'}\n</bloom_memory>\n\n"
         f"{_build_viva_context_blob(files_content)}"
     )
-    reply = call_model(SYSTEM_VIVA_COACH, prompt)
+    reply = _invoke_model(SYSTEM_VIVA_COACH, prompt, on_delta=on_delta)
 
     if reply.get("model") == "fake":
         probe_q = f"Khi đối chiếu `{cite}` và `{cite2}`, điều kiện nào buộc hệ thống phải dừng/hỏi lại (G10) thay vì đoán?"
@@ -1083,6 +1093,7 @@ def _run_audit_pipeline(
     file_contents: dict,
     action_banner: str = "",
     extra_notes: str = "",
+    on_delta=None,
 ) -> dict:
     """Chạy chung Bước 2 (1 lượt @model_call) và Bước 3 (verify_audit_output) cho cả hồ sơ offline và GitHub Live Guard."""
     rubric = get_rubric(["ALL"])
@@ -1094,7 +1105,7 @@ def _run_audit_pipeline(
         file_contents,
         extra_notes=extra_notes,
     )
-    reply = call_model(SYSTEM, prompt)
+    reply = _invoke_model(SYSTEM, prompt, on_delta=on_delta)
     ai_text = reply["text"]
 
     if reply.get("model") == "fake":

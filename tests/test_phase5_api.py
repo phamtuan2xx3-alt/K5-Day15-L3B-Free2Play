@@ -654,6 +654,138 @@ class TestPhase5Api(unittest.TestCase):
             self.assertEqual(r6.status_code, 429)
             trusted_client.close()
 
+    def _parse_sse(self, raw_text: str) -> list[tuple[str, dict]]:
+        events: list[tuple[str, dict]] = []
+        for frame in raw_text.split("\n\n"):
+            if not frame.strip():
+                continue
+            ev_name = "message"
+            data_lines = []
+            for line in frame.splitlines():
+                if not line or line.startswith(":"):
+                    continue
+                if line.startswith("event:"):
+                    ev_name = line[6:].strip()
+                elif line.startswith("data:"):
+                    data_lines.append(line[5:].strip())
+            if data_lines:
+                events.append((ev_name, json.loads("\n".join(data_lines))))
+        return events
+
+    def test_scan_stream_local_and_github_sse(self):
+        # 1. Local submission S01 stream
+        res_local = self.client.post("/api/scan/stream", json={"target": "S01"})
+        self.assertEqual(res_local.status_code, 200)
+        self.assertIn("text/event-stream", res_local.headers.get("content-type", ""))
+        self.assertIn("no-transform", res_local.headers.get("cache-control", ""))
+        self.assertEqual(res_local.headers.get("x-accel-buffering"), "no")
+
+        evs_local = self._parse_sse(res_local.text)
+        names_local = [n for n, _ in evs_local]
+        self.assertIn("stage", names_local)
+        self.assertIn("preflight", names_local)
+        self.assertIn("content", names_local)
+        self.assertEqual(names_local[-1], "done")
+
+        preflight_local = next(d for n, d in evs_local if n == "preflight")
+        self.assertEqual(preflight_local["source_label"], "S01")
+        done_local = evs_local[-1][1]
+        self.assertEqual(done_local["source_label"], "S01")
+        self.assertIn("checks", done_local)
+
+        fetched = self.client.get(f"/api/sessions/{done_local['scan_id']}")
+        self.assertEqual(fetched.status_code, 200)
+
+        # 2. GitHub repo stream with mocked snapshot fetch & AI reasoning/content deltas
+        fake_snap = {
+            "ok": True,
+            "full_name": "owner-demo/repo-stream",
+            "owner": "owner-demo",
+            "commit_sha": "abc1234def5678",
+            "repo_profile": "ai20k_day15",
+            "present_files": ["TEAMS.md", "spec.md", "canvas.md", "evidence/summary.md", "eval/benchmark.csv", "eval/metric_spec.yaml"],
+            "missing_required": [],
+            "line_counts": {"TEAMS.md": 5, "spec.md": 5},
+            "files_content": {
+                "TEAMS.md": "| Tên | Vai trò | Việc |\n|---|---|---|\n| Tuấn | Đội trưởng | Code |",
+                "spec.md": "# Spec\nChuẩn đạt: 20/25.",
+            },
+            "hard_flags": [],
+            "checks": {
+                "public_access": {"status": "pass", "default_branch": "main"},
+                "git_fork_pr": {"status": "pass"},
+                "penalty_standard": {"status": "pass"},
+                "penalty_key": {"status": "pass"},
+            },
+            "g10_warnings": [],
+        }
+
+        def fake_call_model(system, user, model=None, *, on_delta=None):
+            if callable(on_delta):
+                on_delta("reasoning", "Đang kiểm tra `spec.md:L01`...")
+                on_delta("content", "Không phát hiện lỗi sai phạm tại `spec.md:L02`.")
+            return {
+                "text": "Không phát hiện lỗi sai phạm tại `spec.md:L02`.",
+                "model": "test-stream-model",
+                "tokens_in": 100,
+                "tokens_out": 50,
+            }
+
+        with (
+            patch.object(github_guard, "fetch_github_repo_snapshot", return_value=fake_snap),
+            patch("agent.call_model", side_effect=fake_call_model),
+        ):
+            res_gh = self.client.post(
+                "/api/scan/stream",
+                json={"target": "https://github.com/owner-demo/repo-stream", "force_refresh": True},
+            )
+        self.assertEqual(res_gh.status_code, 200)
+        evs_gh = self._parse_sse(res_gh.text)
+        self.assertIn("reasoning", [n for n, _ in evs_gh])
+        self.assertIn("content", [n for n, _ in evs_gh])
+        done_gh = evs_gh[-1][1]
+        self.assertEqual(done_gh["source_label"], "owner-demo/repo-stream")
+        self.assertIn("spec.md:L02", done_gh["audit_output"])
+
+    def test_viva_stream_endpoints_sse(self):
+        scan_res = self.client.post("/api/scan", json={"target": "S01"})
+        self.assertEqual(scan_res.status_code, 200)
+        scan_data = scan_res.json()
+        scan_id = scan_data["scan_id"]
+        member = scan_data["members"][0]["name"]
+
+        ask_res = self.client.post("/api/viva/ask/stream", json={"scan_id": scan_id, "member_name": member})
+        self.assertEqual(ask_res.status_code, 200)
+        self.assertIn("text/event-stream", ask_res.headers.get("content-type", ""))
+        ask_evs = self._parse_sse(ask_res.text)
+        self.assertEqual(ask_evs[-1][0], "done")
+        ask_done = ask_evs[-1][1]
+        self.assertIn("question", ask_done)
+
+        def_res = self.client.post(
+            "/api/viva/defense/stream",
+            json={
+                "scan_id": scan_id,
+                "member_name": member,
+                "question": ask_done["question"],
+                "answer": "Vì bước code đọc file chạy trước model nên giữ được file:Lxx chính xác theo spec.md:L01.",
+                "viva_meta": ask_done.get("viva_meta_token"),
+            },
+        )
+        self.assertEqual(def_res.status_code, 200)
+        def_evs = self._parse_sse(def_res.text)
+        self.assertEqual(def_evs[-1][0], "done")
+        self.assertIn("ai_feedback", def_evs[-1][1])
+
+        coach_res = self.client.post(
+            "/api/viva/coach/stream",
+            json={"scan_id": scan_id, "member_name": member, "goal": "Nâng lên L5"},
+        )
+        self.assertEqual(coach_res.status_code, 200)
+        coach_evs = self._parse_sse(coach_res.text)
+        self.assertEqual(coach_evs[-1][0], "done")
+        self.assertIn("advice", coach_evs[-1][1])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,9 +7,9 @@ import {
   getSessionDiff,
   getSubmissions,
   listSessions,
-  scanTarget,
+  scanTargetStream,
 } from "@/api/client.ts";
-import { AuditPanel } from "@/components/AuditPanel.tsx";
+import { AuditPanel, ScanStreamPanel } from "@/components/AuditPanel.tsx";
 import { CiteDialog } from "@/components/CiteDialog.tsx";
 import { ExportPanel } from "@/components/ExportPanel.tsx";
 import { LegalPage } from "@/components/LegalPages.tsx";
@@ -24,6 +24,7 @@ import type {
   ScanDiffSummary,
   ScanSessionDetail,
   ScanSessionSummary,
+  ScanStreamState,
   SubmissionOption,
 } from "@/types.ts";
 import { extractUrlHackTarget } from "@/utils/citations.ts";
@@ -47,6 +48,8 @@ export function App() {
   const [activeSession, setActiveSession] = useState<ScanSessionDetail | null>(null);
   const [activeDiff, setActiveDiff] = useState<ScanDiffSummary | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanStream, setScanStream] = useState<ScanStreamState | null>(null);
+  const scanAbortRef = useRef<AbortController | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
 
@@ -129,18 +132,62 @@ export function App() {
     }
   }, []);
 
+  const handleCancelScan = useCallback(() => {
+    scanAbortRef.current?.abort();
+    scanAbortRef.current = null;
+    setScanStream(null);
+    setScanning(false);
+  }, []);
+
   const handleScan = useCallback(
     async (target: string, forceRefresh = false) => {
+      scanAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      scanAbortRef.current = ctrl;
+
       setScanning(true);
       setGlobalError(null);
       setNeedsAuth(false);
+      setActiveTab("audit");
+      setScanStream({
+        target,
+        stageStep: "fetch",
+        stageLabel: `Đang khởi tạo quét ${target}…`,
+        startedAt: Date.now(),
+        preflight: null,
+        reasoningText: "",
+        contentText: "",
+      });
+
       try {
-        const detail = await scanTarget(target, forceRefresh);
+        const detail = await scanTargetStream(target, forceRefresh, {
+          signal: ctrl.signal,
+          onStage: (ev) => {
+            setScanStream((prev) =>
+              prev ? { ...prev, stageStep: ev.step || prev.stageStep, stageLabel: ev.label || prev.stageLabel } : prev,
+            );
+          },
+          onPreflight: (preflight) => {
+            setScanStream((prev) => (prev ? { ...prev, preflight } : prev));
+          },
+          onReasoning: (delta) => {
+            setScanStream((prev) => (prev ? { ...prev, reasoningText: prev.reasoningText + delta } : prev));
+          },
+          onContent: (delta) => {
+            setScanStream((prev) => (prev ? { ...prev, contentText: prev.contentText + delta } : prev));
+          },
+        });
+        if (ctrl.signal.aborted) return;
         setActiveSession(detail);
         setActiveDiff(detail.diff ?? null);
         setActiveTab("audit");
+        setScanStream(null);
         await refreshSessions();
       } catch (err) {
+        if ((err instanceof DOMException && err.name === "AbortError") || ctrl.signal.aborted) {
+          return;
+        }
+        setScanStream(null);
         if (err instanceof ApiError && err.status === 401) {
           setNeedsAuth(true);
           setGlobalError(err.message);
@@ -148,7 +195,10 @@ export function App() {
           setGlobalError(err instanceof Error ? err.message : "Quét hồ sơ thất bại.");
         }
       } finally {
-        setScanning(false);
+        if (scanAbortRef.current === ctrl) {
+          scanAbortRef.current = null;
+          setScanning(false);
+        }
       }
     },
     [refreshSessions],
@@ -393,6 +443,8 @@ export function App() {
                     Đăng nhập Google
                   </a>
                 </div>
+              ) : scanStream ? (
+                <ScanStreamPanel stream={scanStream} onCancel={handleCancelScan} />
               ) : !activeSession ? (
                 <div className="tabpanel-inner space-y-3">
                   <h1 className="m-0 text-xl font-bold tracking-tight">

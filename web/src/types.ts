@@ -196,3 +196,31 @@ export interface HealthResponse {
   model_provider?: string;
   allow_guest_demo?: boolean;
 }
+
+export interface StreamStageEvent {
+  step: string;
+  label: string;
+}
+
+export interface ScanPreflightPayload {
+  source_type: "local" | "github" | string;
+  source_label: string;
+  commit_sha?: string;
+  mode: "team" | "personal" | string;
+  members: MemberIdentity[];
+  checks: Record<string, GitHubCheckStatus> | GitHubCheckStatus[];
+  hard_flags: HardFlag[];
+  missing_required: string[];
+  present_files_count?: number;
+  repo_profile?: string;
+}
+
+export interface ScanStreamState {
+  target: string;
+  stageStep: string;
+  stageLabel: string;
+  startedAt: number;
+  preflight: ScanPreflightPayload | null;
+  reasoningText: string;
+  contentText: string;
+}

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { BookmarkCheck, Check, Eye, EyeOff, MessageSquare, RotateCcw, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { BookmarkCheck, Check, Eye, EyeOff, MessageSquare, RotateCcw, TrendingUp, X } from "lucide-react";
 import {
   confirmStudyLog,
   getMemberProfile,
   updateCardStatus,
-  vivaAsk,
-  vivaCoach,
-  vivaDefense,
+  vivaAskStream,
+  vivaCoachStream,
+  vivaDefenseStream,
 } from "@/api/client.ts";
 import { CiteText } from "@/components/CiteText.tsx";
 import { InlineMarkdown, MarkdownView } from "@/components/MarkdownView.tsx";
@@ -46,6 +46,18 @@ interface ActiveCard {
   hiddenRubric?: string;
 }
 
+interface VivaStreamState {
+  action: "ask" | "coach" | "defense";
+  stageLabel: string;
+  startedAt: number;
+  reasoningText: string;
+  contentText: string;
+}
+
+function stripStreamingMeta(raw: string): string {
+  return (raw || "").replace(/\[(?:VIVA_META_JSON|BLOOM_LOG_DRAFT_JSON)[\s\S]*$/i, "").trim();
+}
+
 export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
   const defaultMember = useMemo(() => {
     if (session.default_user) return session.default_user;
@@ -65,19 +77,45 @@ export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
   const [savedConfirmed, setSavedConfirmed] = useState<boolean>(false);
 
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [vivaStream, setVivaStream] = useState<VivaStreamState | null>(null);
+  const [vivaElapsedSec, setVivaElapsedSec] = useState(0);
+  const vivaAbortRef = useRef<AbortController | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!vivaStream) {
+      setVivaElapsedSec(0);
+      return;
+    }
+    setVivaElapsedSec(Math.max(0, Math.floor((Date.now() - vivaStream.startedAt) / 1000)));
+    const id = window.setInterval(() => {
+      setVivaElapsedSec(Math.max(0, Math.floor((Date.now() - vivaStream.startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [vivaStream?.startedAt]);
+
+  useEffect(() => {
+    vivaAbortRef.current?.abort();
+    vivaAbortRef.current = null;
     setSelectedMember(defaultMember);
     setActiveCard(null);
     setDefenseResult(null);
+    setVivaStream(null);
+    setBusyAction(null);
     setAnswerText("");
     setRevealAnswer(false);
     setSavedConfirmed(false);
     setErrorMsg(null);
     setStatusMsg(null);
   }, [session.scan_id, defaultMember]);
+
+  const handleCancelVivaStream = () => {
+    vivaAbortRef.current?.abort();
+    vivaAbortRef.current = null;
+    setVivaStream(null);
+    setBusyAction(null);
+  };
 
   const memberSlug = useMemo(() => {
     const matched = session.members.find((m) => m.name === selectedMember);
@@ -101,18 +139,42 @@ export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
   }, [memberSlug, loadProfile]);
 
   const handleAsk = async () => {
+    vivaAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    vivaAbortRef.current = ctrl;
+
     setBusyAction("ask");
     setErrorMsg(null);
     setStatusMsg(null);
     setDefenseResult(null);
     setRevealAnswer(false);
     setSavedConfirmed(false);
+    setVivaStream({
+      action: "ask",
+      stageLabel: "Giám khảo AI đang soạn câu hỏi vặn…",
+      startedAt: Date.now(),
+      reasoningText: "",
+      contentText: "",
+    });
     try {
-      const res = await vivaAsk({
-        scan_id: session.scan_id,
-        member_name: selectedMember,
-        topic: topic.trim() || undefined,
-      });
+      const res = await vivaAskStream(
+        {
+          scan_id: session.scan_id,
+          member_name: selectedMember,
+          topic: topic.trim() || undefined,
+        },
+        {
+          signal: ctrl.signal,
+          onStage: (ev) =>
+            setVivaStream((prev) => (prev ? { ...prev, stageLabel: ev.label || prev.stageLabel } : prev)),
+          onReasoning: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, reasoningText: prev.reasoningText + delta } : prev)),
+          onContent: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, contentText: prev.contentText + delta } : prev)),
+        },
+      );
+      if (ctrl.signal.aborted) return;
+      setVivaStream(null);
       setActiveCard({
         entryId: res.entry_id,
         mode: "ask",
@@ -125,25 +187,54 @@ export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
       });
       setAnswerText("");
     } catch (err) {
+      setVivaStream(null);
+      if ((err instanceof DOMException && err.name === "AbortError") || ctrl.signal.aborted) return;
       setErrorMsg(err instanceof Error ? err.message : "Không tạo được câu hỏi vặn.");
     } finally {
-      setBusyAction(null);
+      if (vivaAbortRef.current === ctrl) {
+        vivaAbortRef.current = null;
+        setBusyAction(null);
+      }
     }
   };
 
   const handleCoach = async () => {
+    vivaAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    vivaAbortRef.current = ctrl;
+
     setBusyAction("coach");
     setErrorMsg(null);
     setStatusMsg(null);
     setDefenseResult(null);
     setRevealAnswer(false);
     setSavedConfirmed(false);
+    setVivaStream({
+      action: "coach",
+      stageLabel: "Đang phân tích điểm nghẽn để gợi mở +1 Bloom…",
+      startedAt: Date.now(),
+      reasoningText: "",
+      contentText: "",
+    });
     try {
-      const res = await vivaCoach({
-        scan_id: session.scan_id,
-        member_name: selectedMember,
-        goal: topic.trim() || "Tư vấn lộ trình & nâng bậc +1 Bloom",
-      });
+      const res = await vivaCoachStream(
+        {
+          scan_id: session.scan_id,
+          member_name: selectedMember,
+          goal: topic.trim() || "Tư vấn lộ trình & nâng bậc +1 Bloom",
+        },
+        {
+          signal: ctrl.signal,
+          onStage: (ev) =>
+            setVivaStream((prev) => (prev ? { ...prev, stageLabel: ev.label || prev.stageLabel } : prev)),
+          onReasoning: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, reasoningText: prev.reasoningText + delta } : prev)),
+          onContent: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, contentText: prev.contentText + delta } : prev)),
+        },
+      );
+      if (ctrl.signal.aborted) return;
+      setVivaStream(null);
       setActiveCard({
         entryId: res.entry_id,
         mode: "coach",
@@ -157,32 +248,66 @@ export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
       });
       setAnswerText("");
     } catch (err) {
+      setVivaStream(null);
+      if ((err instanceof DOMException && err.name === "AbortError") || ctrl.signal.aborted) return;
       setErrorMsg(err instanceof Error ? err.message : "Không gọi được tư vấn nâng bậc Bloom.");
     } finally {
-      setBusyAction(null);
+      if (vivaAbortRef.current === ctrl) {
+        vivaAbortRef.current = null;
+        setBusyAction(null);
+      }
     }
   };
 
   const handleSubmitDefense = async (e: FormEvent) => {
     e.preventDefault();
     if (!activeCard || !answerText.trim()) return;
+    vivaAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    vivaAbortRef.current = ctrl;
+
     setBusyAction("defense");
     setErrorMsg(null);
     setStatusMsg(null);
     setSavedConfirmed(false);
+    setVivaStream({
+      action: "defense",
+      stageLabel: "Giám khảo AI đang chấm mức hiểu Bloom L0–L6…",
+      startedAt: Date.now(),
+      reasoningText: "",
+      contentText: "",
+    });
     try {
-      const res = await vivaDefense({
-        scan_id: session.scan_id,
-        member_name: selectedMember,
-        question: activeCard.question,
-        answer: answerText.trim(),
-        viva_meta: activeCard.vivaMetaToken,
-      });
+      const res = await vivaDefenseStream(
+        {
+          scan_id: session.scan_id,
+          member_name: selectedMember,
+          question: activeCard.question,
+          answer: answerText.trim(),
+          viva_meta: activeCard.vivaMetaToken,
+        },
+        {
+          signal: ctrl.signal,
+          onStage: (ev) =>
+            setVivaStream((prev) => (prev ? { ...prev, stageLabel: ev.label || prev.stageLabel } : prev)),
+          onReasoning: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, reasoningText: prev.reasoningText + delta } : prev)),
+          onContent: (delta) =>
+            setVivaStream((prev) => (prev ? { ...prev, contentText: prev.contentText + delta } : prev)),
+        },
+      );
+      if (ctrl.signal.aborted) return;
+      setVivaStream(null);
       setDefenseResult(res);
     } catch (err) {
+      setVivaStream(null);
+      if ((err instanceof DOMException && err.name === "AbortError") || ctrl.signal.aborted) return;
       setErrorMsg(err instanceof Error ? err.message : "Không đánh giá được câu trả lời.");
     } finally {
-      setBusyAction(null);
+      if (vivaAbortRef.current === ctrl) {
+        vivaAbortRef.current = null;
+        setBusyAction(null);
+      }
     }
   };
 
@@ -373,7 +498,48 @@ export function VivaStudyPanel({ session, onSelectCite }: VivaStudyPanelProps) {
         {/* Practice card */}
         <Card className="bg-card shadow-none" aria-label="Thẻ luyện phản biện Bloom">
           <CardContent className="p-4">
-            {!activeCard ? (
+            {vivaStream ? (
+              <div className="space-y-3" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="stream-dot shrink-0" aria-hidden="true" />
+                    <strong className="text-sm text-foreground truncate">{vivaStream.stageLabel}</strong>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="default" className="font-mono tabular-nums">
+                      {vivaElapsedSec}s
+                    </Badge>
+                    <Button type="button" variant="outline" size="sm" onClick={handleCancelVivaStream}>
+                      <X aria-hidden="true" className="h-3.5 w-3.5" />
+                      Huỷ
+                    </Button>
+                  </div>
+                </div>
+
+                {vivaStream.reasoningText ? (
+                  <details className="disclosure" open={!stripStreamingMeta(vivaStream.contentText)}>
+                    <summary>
+                      Suy luận của Giám khảo AI ({vivaStream.reasoningText.length.toLocaleString("vi-VN")} ký tự)
+                    </summary>
+                    <pre className="m-0 max-h-48 overflow-y-auto scroller whitespace-pre-wrap break-words rounded border border-border/70 bg-card/80 p-2.5 font-mono text-xs leading-relaxed text-muted-foreground">
+                      {vivaStream.reasoningText}
+                    </pre>
+                  </details>
+                ) : null}
+
+                <div className="rounded-lg border border-border bg-muted/30 p-3.5">
+                  {stripStreamingMeta(vivaStream.contentText) ? (
+                    <MarkdownView text={stripStreamingMeta(vivaStream.contentText)} onSelectCite={onSelectCite} />
+                  ) : (
+                    <p className="m-0 text-sm text-muted-foreground">
+                      {vivaStream.reasoningText
+                        ? "Đang tổng hợp ý phản biện trước khi hiển thị…"
+                        : "Đang chờ token phản hồi từ AI…"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : !activeCard ? (
               <div className="space-y-1.5">
                 <h2 className="m-0 text-base font-semibold text-foreground">Vấn đáp: {selectedMember}</h2>
                 <p className="m-0 text-sm text-muted-foreground">

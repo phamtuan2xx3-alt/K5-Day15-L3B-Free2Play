@@ -90,6 +90,69 @@ class TestPhase1AI(unittest.TestCase):
             },
         )
 
+    def test_call_model_vilao_streaming_sse_reasoning_and_usage(self):
+        class _FakeSSEResponse:
+            def __init__(self, lines: list[bytes]):
+                self._lines = lines
+                self.headers = {"Content-Type": "text/event-stream; charset=utf-8"}
+
+            def __iter__(self):
+                return iter(self._lines)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        sse_lines = [
+            b': keepalive\n',
+            b'data: {"choices":[{"delta":{"role":"assistant","reasoning_content":"suy "}}]}\n',
+            b'data: {"choices":[{"delta":{"reasoning_content":"luan"}}]}\n',
+            b'data: {"choices":[{"delta":{"content":"Ket "}}]}\n',
+            b'data: {"choices":[{"delta":{"content":"qua"}}]}\n',
+            b'data: {"choices":[],"usage":{"prompt_tokens":50,"completion_tokens":30,"completion_tokens_details":{"reasoning_tokens":12}}}\n',
+            b'data: [DONE]\n',
+        ]
+        captured_payload = {}
+        deltas: list[tuple[str, str]] = []
+
+        def fake_urlopen(req, timeout=120):
+            captured_payload["body"] = json.loads(req.data.decode("utf-8"))
+            captured_payload["accept"] = dict(req.header_items()).get("Accept")
+            return _FakeSSEResponse(sse_lines)
+
+        with (
+            patch.object(ai, "MODEL_PROVIDER", "vilao"),
+            patch.object(ai, "MODEL_NAME", "chib/deepseek-v4.1-flash"),
+            patch.object(ai, "API_KEY", "k-stream"),
+            patch.object(ai, "API_BASE_URL", "https://api.vilao.ai/v1"),
+            patch("urllib.request.urlopen", side_effect=fake_urlopen),
+        ):
+            res = ai.call_model("sys", "usr", on_delta=lambda kind, chunk: deltas.append((kind, chunk)))
+
+        self.assertTrue(captured_payload["body"]["stream"])
+        self.assertEqual(captured_payload["body"]["stream_options"], {"include_usage": True})
+        self.assertEqual(captured_payload["accept"], "text/event-stream")
+        self.assertEqual(
+            deltas,
+            [
+                ("reasoning", "suy "),
+                ("reasoning", "luan"),
+                ("content", "Ket "),
+                ("content", "qua"),
+            ],
+        )
+        self.assertEqual(
+            res,
+            {
+                "text": "Ket qua",
+                "model": "chib/deepseek-v4.1-flash",
+                "tokens_in": 50,
+                "tokens_out": 42,
+            },
+        )
+
 
 class TestPhase1Tools(unittest.TestCase):
     def test_verify_audit_output_supports_slash_paths_and_bloom_levels(self):

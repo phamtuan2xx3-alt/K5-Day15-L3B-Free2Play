@@ -1,6 +1,7 @@
 """FastAPI Backend cho RepoKSV (Hướng 1 + Hướng 2) — OAuth PKCE, Rate-Limit, REST API & Export."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -11,15 +12,17 @@ import os
 import re
 import secrets
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -521,7 +524,11 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        if path.startswith(("/api/", "/auth/")) or path in {"/api", "/auth"}:
+        ctype = (resp.headers.get("content-type") or "").lower()
+        if ctype.startswith("text/event-stream"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, no-transform"
+            resp.headers["X-Accel-Buffering"] = "no"
+        elif path.startswith(("/api/", "/auth/")) or path in {"/api", "/auth"}:
             resp.headers["Cache-Control"] = "no-store"
         return resp
 
@@ -601,11 +608,68 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+    ram_lock = threading.Lock()
+
     def _put_ram_files(scan_id: str, files_content: dict[str, str]) -> None:
-        ram_scan_files[scan_id] = dict(files_content)
-        ram_scan_files.move_to_end(scan_id)
-        while len(ram_scan_files) > MAX_RAM_SCANS:
-            ram_scan_files.popitem(last=False)
+        with ram_lock:
+            ram_scan_files[scan_id] = dict(files_content)
+            ram_scan_files.move_to_end(scan_id)
+            while len(ram_scan_files) > MAX_RAM_SCANS:
+                ram_scan_files.popitem(last=False)
+
+    async def _make_sse_response(
+        request: Request,
+        cookie_carrier: Response,
+        worker: Callable[[Callable[[str, dict[str, Any]], None]], None],
+    ) -> StreamingResponse:
+        """Tạo StreamingResponse SSE (text/event-stream) đẩy sự kiện real-time từ worker thread."""
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
+
+        def emit(event_name: str, payload: dict[str, Any]) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, (event_name, payload))
+
+        def _runner() -> None:
+            try:
+                worker(emit)
+            except HTTPException as exc:
+                emit("error", {"status": exc.status_code, "detail": str(exc.detail)})
+            except Exception as exc:
+                logger.exception("SSE worker error: %s", exc)
+                emit("error", {"status": 500, "detail": f"Lỗi xử lý streaming: {exc}"})
+            finally:
+                store.close_thread()
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+
+        async def _event_gen():
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        break
+                    yield ": keepalive\n\n"
+                    continue
+                if item is None:
+                    break
+                ev_name, ev_data = item
+                yield f"event: {ev_name}\ndata: {json.dumps(ev_data, ensure_ascii=False)}\n\n"
+
+        resp = StreamingResponse(
+            _event_gen(),
+            media_type="text/event-stream; charset=utf-8",
+            headers={
+                "Cache-Control": "no-cache, no-store, no-transform",
+                "X-Accel-Buffering": "no",
+            },
+        )
+        for k, v in cookie_carrier.raw_headers:
+            if k.lower() == b"set-cookie":
+                resp.raw_headers.append((k, v))
+        return resp
 
     def _resolve_actor(request: Request, response: Response | None = None, *, require_write: bool = True) -> str:
         """Lấy owner_user_id từ cookie session Google hoặc guest demo anon:<id>."""
@@ -1020,6 +1084,192 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         _put_ram_files(created["scan_id"], files_content)
         return _session_to_detail(created)
 
+    @app.post("/api/scan/stream")
+    async def scan_repo_stream(req: ScanRequest, request: Request) -> StreamingResponse:
+        cookie_carrier = Response()
+        owner_user_id = _resolve_actor(request, cookie_carrier)
+        ip = _client_ip(request)
+        allowed, _, retry_after = store.check_and_increment_rate_limit(
+            f"ip:{ip}:scan", SCAN_RATE_LIMIT, SCAN_WINDOW_S
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Vượt giới hạn {SCAN_RATE_LIMIT} lượt quét/phút. Thử lại sau {retry_after}s.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        raw_target = req.target.strip()
+        sub_id = agent._extract_submission_id(raw_target)
+        parsed_gh = None if sub_id else github_guard.parse_github_target(raw_target)
+        if sub_id:
+            bundle = tools.load_submission_bundle(sub_id)
+            if not bundle.get("exists"):
+                raise HTTPException(status_code=404, detail=f"Không tìm thấy hồ sơ `{sub_id}`.")
+        elif not parsed_gh:
+            raise HTTPException(
+                status_code=400,
+                detail="URL GitHub không hợp lệ hoặc bị chặn bởi bộ lọc SSRF.",
+            )
+
+        def _worker(emit: Callable[[str, dict[str, Any]], None]) -> None:
+            def _on_delta(kind: str, chunk: str) -> None:
+                if chunk:
+                    emit("reasoning" if kind == "reasoning" else "content", {"delta": chunk})
+
+            if sub_id:
+                emit("stage", {"step": "fetch", "label": f"Đang nạp hồ sơ mẫu {sub_id} & quét quy tắc cứng..."})
+                files_content = {k: v for k, v in bundle["files_content"].items() if k != "meta.json"}
+                hard_flags = tools.scan_in_memory_submission(bundle["files_content"], meta=bundle.get("meta"))
+                identity = tools.extract_project_identity(files_content)
+                file_info = bundle["file_info"]
+                checks_ui = _normalize_checks_for_ui("local", None, hard_flags)
+
+                emit(
+                    "preflight",
+                    {
+                        "source_type": "local",
+                        "source_label": sub_id,
+                        "commit_sha": "",
+                        "mode": identity["mode"],
+                        "members": identity["members"],
+                        "checks": checks_ui,
+                        "hard_flags": hard_flags,
+                        "missing_required": file_info["missing_required"],
+                        "present_files_count": len(file_info["present_files"]),
+                    },
+                )
+                emit("stage", {"step": "ai", "label": "Giám khảo AI đang phân tích & đối chiếu chéo rubric..."})
+
+                tracing.begin("api_scan_stream")
+                try:
+                    res = agent._run_audit_pipeline(
+                        f"SUBMISSION_ID: {sub_id}",
+                        file_info,
+                        hard_flags,
+                        {k: tools.read_file_lines(sub_id, k) for k in file_info["present_files"] if k != "meta.json"},
+                        on_delta=_on_delta,
+                    )
+                finally:
+                    trace_summary, _ = tracing.end()
+
+                emit("stage", {"step": "verify", "label": "Đang hậu kiểm trích dẫn file:Lxx & lưu phiên..."})
+                created = store.create_scan_session(
+                    owner_user_id,
+                    "local",
+                    sub_id,
+                    res["output"],
+                    commit_sha="",
+                    mode=identity["mode"],
+                    members=identity["members"],
+                    hard_flags=hard_flags,
+                    checks=checks_ui,
+                    missing_required=file_info["missing_required"],
+                    line_counts=file_info["line_counts"],
+                    tracing=trace_summary,
+                )
+                emit("done", _session_to_detail(created))
+                return
+
+            assert parsed_gh is not None
+            emit(
+                "stage",
+                {
+                    "step": "fetch",
+                    "label": f"Đang tải cây file & chạy 4 lớp GitHub Live Guard cho {parsed_gh['full_name']}...",
+                },
+            )
+            snap = github_guard.fetch_github_repo_snapshot(
+                parsed_gh, force_refresh=req.force_refresh, db=store
+            )
+            if not snap.get("ok"):
+                err_code = snap.get("error_code")
+                status = 400 if err_code == "INVALID_OR_BLOCKED_URL" else (429 if err_code == "RATE_LIMITED" else 404)
+                emit("error", {"status": status, "detail": snap.get("g10_message") or "Không truy cập được repo GitHub."})
+                return
+
+            full_name = str(snap["full_name"])
+            commit_sha = str(snap.get("commit_sha") or "")
+            files_content = {k: v for k, v in (snap.get("files_content") or {}).items() if k != "meta.json"}
+            identity = snap.get("identity") or tools.extract_project_identity(files_content, github_owner=snap.get("owner", ""))
+            hard_flags = snap.get("hard_flags") or []
+            checks_ui = _normalize_checks_for_ui("github", snap.get("checks"), hard_flags)
+
+            emit(
+                "preflight",
+                {
+                    "source_type": "github",
+                    "source_label": full_name,
+                    "commit_sha": commit_sha,
+                    "mode": identity["mode"],
+                    "members": identity["members"],
+                    "checks": checks_ui,
+                    "hard_flags": hard_flags,
+                    "missing_required": snap["missing_required"],
+                    "present_files_count": len(snap["present_files"]),
+                    "repo_profile": str(snap.get("repo_profile") or "ai20k_day15"),
+                },
+            )
+
+            cache_key = f"audit:v2:{full_name.lower()}"
+            cached_audit = None if req.force_refresh else store.get_cached_github(cache_key)
+            if cached_audit and cached_audit.get("commit_sha") == commit_sha and (cached_audit.get("payload") or {}).get("audit_output"):
+                audit_output = str(cached_audit["payload"]["audit_output"])
+                trace_summary = {"model_calls": 0, "tool_calls": 0, "tokens_in": 0, "tokens_out": 0, "from_cache": True}
+                emit("stage", {"step": "verify", "label": "Khớp cache commit — đang hoàn tất phiên..."})
+            else:
+                file_info = {
+                    "exists": True,
+                    "submission_id": full_name,
+                    "present_files": snap["present_files"],
+                    "missing_required": snap["missing_required"],
+                    "line_counts": snap["line_counts"],
+                }
+                numbered_contents = agent._format_bounded_file_contents(files_content)
+                repo_profile = str(snap.get("repo_profile") or "ai20k_day15")
+                notes_list = agent.build_github_audit_notes(
+                    identity,
+                    repo_profile,
+                    base_warnings=list(snap.get("g10_warnings") or []),
+                )
+                emit("stage", {"step": "ai", "label": "Giám khảo AI đang phân tích & đối chiếu chéo rubric..."})
+
+                tracing.begin("api_scan_github_stream")
+                try:
+                    res = agent._run_audit_pipeline(
+                        f"AUDIT_GITHUB | {parsed_gh['url']}",
+                        file_info,
+                        hard_flags,
+                        numbered_contents,
+                        extra_notes="\n".join(f"- {n}" for n in notes_list if n),
+                        on_delta=_on_delta,
+                    )
+                finally:
+                    trace_summary, _ = tracing.end()
+
+                emit("stage", {"step": "verify", "label": "Đang hậu kiểm trích dẫn file:Lxx & lưu phiên..."})
+                audit_output = res["output"]
+                store.set_cached_github(cache_key, commit_sha, {"audit_output": audit_output}, ttl_seconds=300)
+
+            created = store.create_scan_session(
+                owner_user_id,
+                "github",
+                full_name,
+                audit_output,
+                commit_sha=commit_sha,
+                mode=identity["mode"],
+                members=identity["members"],
+                hard_flags=hard_flags,
+                checks=checks_ui,
+                missing_required=snap["missing_required"],
+                line_counts=snap["line_counts"],
+                tracing=trace_summary,
+            )
+            _put_ram_files(created["scan_id"], files_content)
+            emit("done", _session_to_detail(created))
+
+        return await _make_sse_response(request, cookie_carrier, _worker)
+
     @app.get("/api/sessions")
     @app.get("/api/scans")
     def list_sessions(request: Request, response: Response) -> dict[str, Any]:
@@ -1137,27 +1387,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                 headers={"Retry-After": str(retry_after)},
             )
 
-    @app.post("/api/viva/ask")
-    def api_viva_ask(req: VivaAskRequest, request: Request, response: Response) -> dict[str, Any]:
-        owner_user_id = _resolve_actor(request, response)
-        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
-        _enforce_llm_quota(owner_user_id, request)
-
-        files_content, github_owner = _resolve_scan_files(session)
-        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
-        res = agent.viva_ask(
-            files_content,
-            member_name=req.member_name,
-            topic=req.topic or "",
-            bloom_summary=bloom_summary,
-            github_owner=github_owner,
-            line_counts=session.get("line_counts"),
-        )
-        if not res.get("ok"):
-            raise HTTPException(status_code=400, detail=res.get("output") or "Không tạo được câu hỏi.")
-
+    def _finalize_viva_ask(session: dict[str, Any], req: VivaAskRequest, res: dict[str, Any]) -> dict[str, Any]:
         cards = res.get("cards") or []
         first_card = cards[0] if cards else (res.get("viva_meta") or {})
         visible_question = str(first_card.get("question") or _strip_hidden_blocks(res.get("output", "")))
@@ -1195,33 +1425,19 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             "raw_output": visible_raw,
         }
 
-    @app.post("/api/viva/defense")
-    def api_viva_defense(req: VivaDefenseRequest, request: Request, response: Response) -> dict[str, Any]:
-        owner_user_id = _resolve_actor(request, response)
-        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
-        _enforce_llm_quota(owner_user_id, request)
-
-        viva_meta_dict: dict[str, Any] = {}
-        if isinstance(req.viva_meta, str) and req.viva_meta:
-            decoded = verify_token(req.viva_meta, expected_typ="viva_meta")
+    def _decode_viva_meta(viva_meta: Any) -> dict[str, Any]:
+        if isinstance(viva_meta, str) and viva_meta:
+            decoded = verify_token(viva_meta, expected_typ="viva_meta")
             if decoded and isinstance(decoded.get("meta"), dict):
-                viva_meta_dict = decoded["meta"]
+                return decoded["meta"]
+        return {}
 
-        files_content, github_owner = _resolve_scan_files(session)
-        res = agent.viva_defense(
-            files_content,
-            member_name=req.member_name,
-            question=req.question,
-            user_answer=req.answer,
-            viva_meta=viva_meta_dict,
-            github_owner=github_owner,
-            line_counts=session.get("line_counts"),
-        )
-        if not res.get("ok"):
-            raise HTTPException(status_code=400, detail=res.get("output") or "Không đánh giá được câu trả lời.")
-
+    def _finalize_viva_defense(
+        session: dict[str, Any],
+        req: VivaDefenseRequest,
+        res: dict[str, Any],
+        viva_meta_dict: dict[str, Any],
+    ) -> dict[str, Any]:
         draft = res.get("draft_profile_update") or {}
         if viva_meta_dict:
             if not draft.get("reference"):
@@ -1252,28 +1468,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             "draft": draft,
         }
 
-    @app.post("/api/viva/coach")
-    def api_viva_coach(req: VivaCoachRequest, request: Request, response: Response) -> dict[str, Any]:
-        owner_user_id = _resolve_actor(request, response)
-        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
-        _enforce_llm_quota(owner_user_id, request)
-
-        files_content, github_owner = _resolve_scan_files(session)
-        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
-        res = agent.viva_coach(
-            files_content,
-            member_name=req.member_name,
-            goal=req.goal or "",
-            bloom_summary=bloom_summary,
-            save_draft=False,
-            github_owner=github_owner,
-            line_counts=session.get("line_counts"),
-        )
-        if not res.get("ok"):
-            raise HTTPException(status_code=400, detail=res.get("output") or "Không tạo được tư vấn Bloom.")
-
+    def _finalize_viva_coach(session: dict[str, Any], req: VivaCoachRequest, res: dict[str, Any]) -> dict[str, Any]:
         visible_advice = _strip_hidden_blocks(res.get("output", ""))
         question = _extract_visible_question(visible_advice)
         meta = res.get("viva_meta") or {}
@@ -1308,6 +1503,163 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
             "source_cite": hidden_meta["source_cite"],
             "viva_meta_token": viva_meta_token,
         }
+
+    @app.post("/api/viva/ask")
+    def api_viva_ask(req: VivaAskRequest, request: Request, response: Response) -> dict[str, Any]:
+        owner_user_id = _resolve_actor(request, response)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+        res = agent.viva_ask(
+            files_content,
+            member_name=req.member_name,
+            topic=req.topic or "",
+            bloom_summary=bloom_summary,
+            github_owner=github_owner,
+            line_counts=session.get("line_counts"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("output") or "Không tạo được câu hỏi.")
+        return _finalize_viva_ask(session, req, res)
+
+    @app.post("/api/viva/ask/stream")
+    async def api_viva_ask_stream(req: VivaAskRequest, request: Request) -> StreamingResponse:
+        cookie_carrier = Response()
+        owner_user_id = _resolve_actor(request, cookie_carrier)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+
+        def _worker(emit: Callable[[str, dict[str, Any]], None]) -> None:
+            emit("stage", {"step": "ai", "label": "Giám khảo AI đang soạn câu hỏi vặn phản biện..."})
+            res = agent.viva_ask(
+                files_content,
+                member_name=req.member_name,
+                topic=req.topic or "",
+                bloom_summary=bloom_summary,
+                github_owner=github_owner,
+                line_counts=session.get("line_counts"),
+                on_delta=lambda kind, chunk: emit("reasoning" if kind == "reasoning" else "content", {"delta": chunk}),
+            )
+            if not res.get("ok"):
+                emit("error", {"status": 400, "detail": res.get("output") or "Không tạo được câu hỏi."})
+                return
+            emit("done", _finalize_viva_ask(session, req, res))
+
+        return await _make_sse_response(request, cookie_carrier, _worker)
+
+    @app.post("/api/viva/defense")
+    def api_viva_defense(req: VivaDefenseRequest, request: Request, response: Response) -> dict[str, Any]:
+        owner_user_id = _resolve_actor(request, response)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+
+        viva_meta_dict = _decode_viva_meta(req.viva_meta)
+        files_content, github_owner = _resolve_scan_files(session)
+        res = agent.viva_defense(
+            files_content,
+            member_name=req.member_name,
+            question=req.question,
+            user_answer=req.answer,
+            viva_meta=viva_meta_dict,
+            github_owner=github_owner,
+            line_counts=session.get("line_counts"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("output") or "Không đánh giá được câu trả lời.")
+        return _finalize_viva_defense(session, req, res, viva_meta_dict)
+
+    @app.post("/api/viva/defense/stream")
+    async def api_viva_defense_stream(req: VivaDefenseRequest, request: Request) -> StreamingResponse:
+        cookie_carrier = Response()
+        owner_user_id = _resolve_actor(request, cookie_carrier)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+        viva_meta_dict = _decode_viva_meta(req.viva_meta)
+        files_content, github_owner = _resolve_scan_files(session)
+
+        def _worker(emit: Callable[[str, dict[str, Any]], None]) -> None:
+            emit("stage", {"step": "ai", "label": "Giám khảo AI đang chấm mức hiểu Bloom L0–L6..."})
+            res = agent.viva_defense(
+                files_content,
+                member_name=req.member_name,
+                question=req.question,
+                user_answer=req.answer,
+                viva_meta=viva_meta_dict,
+                github_owner=github_owner,
+                line_counts=session.get("line_counts"),
+                on_delta=lambda kind, chunk: emit("reasoning" if kind == "reasoning" else "content", {"delta": chunk}),
+            )
+            if not res.get("ok"):
+                emit("error", {"status": 400, "detail": res.get("output") or "Không đánh giá được câu trả lời."})
+                return
+            emit("done", _finalize_viva_defense(session, req, res, viva_meta_dict))
+
+        return await _make_sse_response(request, cookie_carrier, _worker)
+
+    @app.post("/api/viva/coach")
+    def api_viva_coach(req: VivaCoachRequest, request: Request, response: Response) -> dict[str, Any]:
+        owner_user_id = _resolve_actor(request, response)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+        res = agent.viva_coach(
+            files_content,
+            member_name=req.member_name,
+            goal=req.goal or "",
+            bloom_summary=bloom_summary,
+            save_draft=False,
+            github_owner=github_owner,
+            line_counts=session.get("line_counts"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("output") or "Không tạo được tư vấn Bloom.")
+        return _finalize_viva_coach(session, req, res)
+
+    @app.post("/api/viva/coach/stream")
+    async def api_viva_coach_stream(req: VivaCoachRequest, request: Request) -> StreamingResponse:
+        cookie_carrier = Response()
+        owner_user_id = _resolve_actor(request, cookie_carrier)
+        session = store.get_scan_session(req.scan_id, owner_user_id=owner_user_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy phiên quét.")
+        _enforce_llm_quota(owner_user_id, request)
+        files_content, github_owner = _resolve_scan_files(session)
+        bloom_summary = store.summarize_profile_for_prompt(owner_user_id, req.member_name)
+
+        def _worker(emit: Callable[[str, dict[str, Any]], None]) -> None:
+            emit("stage", {"step": "ai", "label": "Đang phân tích điểm nghẽn để gợi mở +1 Bloom..."})
+            res = agent.viva_coach(
+                files_content,
+                member_name=req.member_name,
+                goal=req.goal or "",
+                bloom_summary=bloom_summary,
+                save_draft=False,
+                github_owner=github_owner,
+                line_counts=session.get("line_counts"),
+                on_delta=lambda kind, chunk: emit("reasoning" if kind == "reasoning" else "content", {"delta": chunk}),
+            )
+            if not res.get("ok"):
+                emit("error", {"status": 400, "detail": res.get("output") or "Không tạo được tư vấn Bloom."})
+                return
+            emit("done", _finalize_viva_coach(session, req, res))
+
+        return await _make_sse_response(request, cookie_carrier, _worker)
 
     @app.post("/api/study/confirm-log")
     @app.post("/api/viva/confirm")
