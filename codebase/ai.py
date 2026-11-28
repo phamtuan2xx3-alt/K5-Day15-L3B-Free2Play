@@ -212,17 +212,24 @@ def call_openai(
     messages = ([{"role": "system", "content": system}] if system else []) + [
         {"role": "user", "content": user}
     ]
+    payload: dict = {"model": model_name, "messages": messages}
+    if (
+        "deepseek" in (model_name or "").lower()
+        and os.environ.get("ENABLE_THINKING", "false").strip().lower()
+        in ("0", "false", "no", "off")
+    ):
+        payload["enable_thinking"] = False
     if on_delta is not None:
         return post_sse_openai(
             endpoint,
             {"Authorization": "Bearer " + key},
-            {"model": model_name, "messages": messages},
+            payload,
             on_delta=on_delta,
         )
     data = post_json(
         endpoint,
         {"Authorization": "Bearer " + key},
-        {"model": model_name, "messages": messages},
+        payload,
     )
     tokens_in, tokens_out = _extract_openai_tokens(data.get("usage") or {})
     content = data["choices"][0]["message"].get("content") or ""
