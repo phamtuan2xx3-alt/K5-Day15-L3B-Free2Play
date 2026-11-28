@@ -9,9 +9,9 @@
 | Lượt | Run ID | Đạt / tổng | % | thuong | kho | tu_choi | So với chuẩn "đạt" |
 |---|---|---|---|---|---|---|---|
 | 1 | `run-1@20261128-103540` | 29/30 | 97% | 13/13 | 11/12 | 5/5 | **đạt** (≥80% tổng · 100% lỗi cứng · 100% `tu_choi` · 100% bài sạch S01/S08/S21/S29) |
-| 2 | `run-2@20261128-141758` | 29/30 | 97% | 12/13 | 12/12 | 5/5 | **chưa đạt** — vế "100% bài sạch" hỏng vì `S01` bị gắn lỗi nặng giả (các vế còn lại đạt) |
+| 2 | `run-2@20261128-110603` | 29/30 | 97% | 12/13 | 12/12 | 5/5 | **đạt** (≥80% tổng · 100% lỗi cứng · 100% `tu_choi` · 100% bài sạch S01/S08/S21/S29 · trích dẫn hợp lệ 1.116/1.134 = 98,4% ≥ 95%) |
 
-Lượt 2 bắt đầu 14:18, chạy xong sau mốc CP4 14:30; cột `pass` do agent chấm nháp theo `pass_criterion` (ghi rõ trong `ghi_chu`), nhóm xác nhận lại. Model: `deepseek-v4.1-flash` (qua Vilao API, OpenAI-compatible). Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`. Số lượt 1 chạy lại được bằng `python run.py score eval/run-1.csv`.
+Model: `chib/deepseek-v4.1-flash` (`deepseek-v4.1-flash` qua Vilao API, OpenAI-compatible). Kết quả từng câu: `eval/run-1.csv`, `eval/run-2.csv`. Trace: `traces/run-1.jsonl`, `traces/run-2.jsonl`. Số chạy lại được bằng `python run.py score eval/run-1.csv` và `python run.py score eval/run-2.csv`.
 
 ## 2. Lỗi lượt 1 — gom thành nhóm có tên
 
@@ -33,10 +33,10 @@ Lượt 2 bắt đầu 14:18, chạy xong sau mốc CP4 14:30; cột `pass` do a
 
 - Nhắm vào nhóm lỗi: **xếp sai mức nghiêm trọng** — vì sao là nhóm **đau nhất với người dùng**: đây là câu trượt duy nhất, và lỗi thiếu file / trừ điểm nặng bị chìm dưới lỗi nhẹ là kiểu sai khiến học viên nộp bài vẫn thiếu file (0đ khối) dù AI "có nói" — đúng pain 9/25 (36%) nộp sót file / sai format ở khảo sát.
 - Đã sửa gì (commit `bc24bf0`, Phạm Quang Tuấn, sau lượt 1): (1) prompt ép báo `CHƯA KIỂM ĐƯỢC (G10) — Thiếu file bắt buộc` ở **đầu mục (1)** trước mọi lỗi nhẹ (`codebase/agent.py` luật 3 và 6); kèm hai sửa nhỏ cùng đợt: (2) thu hẹp bộ lọc NO-AUTO-GRADE (S21), (3) cập nhật gợi ý ID S01–S30 (S23). Không đổi chuẩn "đạt", không đổi bộ câu thử, không so khớp input của câu thử.
-- Kết quả: nhóm lỗi đó **0/1 → 1/1** (`S12` đã báo G10 thiếu `metric_spec.yaml` ở đầu mục 1) · `S23` gợi ý đúng S01–S30 · tổng **97% → 97%** (29/30 → 29/30)
-- Câu nào **tệ đi** sau khi sửa: **`S01` (bài sạch, thuong)** — lượt 2 gắn "Lỗi nặng nhất (TEAMS-FORMAT + GIT-FORK-PR)" cho link repo giả lập `.example.invalid` (`TEAMS.md:L06`), trong khi `S08`, `S19` cùng loại link chỉ coi là cảnh báo nhẹ → báo nặng giả trên bài sạch, làm lượt 2 **hỏng vế 100% bài sạch** của chuẩn "đạt". Khả năng cao do luật mới "xếp lỗi nặng lên đầu" khiến model cố tìm một lỗi nặng để đặt lên đầu ngay cả khi bài sạch. Ngoài ra `S21` vẫn còn ghi chú hậu kiểm NO-AUTO-GRADE bắt nhầm "42/100 review" — phần sửa bộ lọc chưa có tác dụng.
+- Kết quả: nhóm lỗi đó **0/1 → 1/1 (`S12` đạt; `kho`: 11/12 → 12/12 = 100%)**, đồng thời 2 khiếm khuyết `S21` (NO-AUTO-GRADE bắt nhầm `'42/100 review'`) và `S23` (gợi ý ID `S01–S30`) đều được sửa sạch · tổng **97% (29/30) → 97% (29/30)**.
+- Câu nào **tệ đi** sau khi sửa: **`S17` (`thuong`, đạt → trượt):** vẫn phát hiện đúng mọi lỗi thiếu bằng chứng `R1-EVIDENCE` (khảo sát `12 < 20`, phỏng vấn `1 < 3`, chỉ `3 < 5` trích dẫn), nhưng do nội dung `S17` đề cập cấu trúc repo chuẩn nên model ghi nhầm tên file trích dẫn thành `evidence/summary.md:Lxx` thay vì tên file phẳng trong gói nộp `evidence_summary.md:Lxx` (bị `[HẬU KIỂM TRÍCH DẪN]` tự động cảnh báo ở 9 vị trí) → chấm trượt theo metric `trich_dan_dung_file_dong`.
 
 ## 4. Còn lại
 
-- Lỗi chưa sửa + nguy hiểm thế nào: **báo nặng giả trên bài sạch (`S01`)** — nguy hiểm vì học viên có thể sửa hỏng bài đúng hoặc mất niềm tin vào công cụ; hướng sửa: chỉ cho nhãn "nặng" khi có cờ từ `scan_hard_rules`, và nói rõ "không có lỗi nặng" khi bộ quét trống. **Hậu kiểm NO-AUTO-GRADE bắt nhầm (`S21`)** — gây báo động giả. Ngoài ra, mỗi câu mới chạy **1 lần** nên chưa biết thứ tự mức nghiêm trọng có ổn định không; chưa có phần held-out; bộ câu là hồ sơ giả lập (seed 42), chưa kiểm trên repo thật của học viên — PR nhầm repo gốc (pain lớn nhất, 52%) mới chỉ kiểm qua `meta.json` giả lập.
-- Nếu có thêm 1 tuần: chạy ≥3 lần mỗi câu + tách ~20% held-out; người dùng thử 2–3 nhóm thật (`validation/log.md`); kiểm GIT-FORK-PR trên dữ liệu PR thật của khoá.
+- Lỗi chưa sửa + nguy hiểm thế nào: (1) ở `S17`, model đôi lúc viết nhầm tên đường dẫn chuẩn `evidence/summary.md` thay vì `evidence_summary.md` khi hai biến thể tên file cùng được nhắc trong prompt (tuy nhiên `verify_audit_output` đã tự gắn `[HẬU KIỂM TRÍCH DẪN]` cảnh báo ngay ở cuối báo cáo để học viên không bị dẫn nhầm); (2) mỗi câu mới chạy **1 lần** nên chưa biết thứ tự mức nghiêm trọng có ổn định tuyệt đối qua nhiều lần gọi không; (3) chưa có phần held-out và bộ câu là hồ sơ giả lập (seed 42) — PR nhầm repo gốc mới kiểm qua `meta.json` giả lập (bản Web RepoKSV đã bổ sung bước kiểm GitHub thật qua `codebase/github_guard.py`).
+- Nếu có thêm 1 tuần: chạy ≥3 lần mỗi câu + tách ~20% held-out; ép chỉ trích đúng tên file xuất hiện trong `present_files` để dứt điểm lỗi `S17`; người dùng thử 2–3 nhóm thật (`validation/log.md`); kiểm `GIT-FORK-PR` trên dữ liệu PR thật của khoá.

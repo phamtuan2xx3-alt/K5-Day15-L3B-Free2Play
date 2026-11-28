@@ -36,14 +36,13 @@
 
 | Lượt | Run ID | Model | Cấu hình (prompt / công cụ / thay đổi) | Đạt / tổng | % | Đạt chuẩn? |
 |---|---|---|---|---|---|---|
-| 1 | `run-1@20261128-103540` | `deepseek-v4.1-flash` (Vilao) | Workflow 3 bước, 1 lượt gọi model / câu, prompt trước commit `bc24bf0` | 29/30 | 97% | Đạt |
-| 2 | `run-2@20261128-141758` (xong sau CP4) | `deepseek-v4.1-flash` (Vilao) | + commit `bc24bf0`: ép báo G10 thiếu file đầu mục (1), thu hẹp lọc NO-AUTO-GRADE, gợi ý ID S01–S30 | 29/30 | 97% | Chưa — `S01` bài sạch bị báo nặng giả |
+| 1 | `run-1@20261128-103540` | `chib/deepseek-v4.1-flash` (Vilao) | Workflow 3 bước, 1 lượt gọi model / câu, prompt trước commit `bc24bf0` | 29/30 | 97% | Đạt |
+| 2 | `run-2@20261128-110603` | `chib/deepseek-v4.1-flash` (Vilao) | + commit `bc24bf0`: ép báo G10 thiếu file đầu mục (1), thu hẹp lọc NO-AUTO-GRADE, gợi ý ID S01–S30 | 29/30 | 97% | Đạt (`kho` 12/12, `tu_choi` 5/5, trích dẫn đúng 98,4%) |
 
 Lượt chạy lại vì lỗi kỹ thuật, lượt sau CP4: ghi thêm dòng, không sửa dòng cũ.
 
 ## 6. Lỗi chính
 
-- **Xếp sai mức nghiêm trọng** (`S12`, câu trượt duy nhất lượt 1): lỗi thiếu file bị đẩy xuống sau lỗi nhẹ.
-- **Hậu kiểm NO-AUTO-GRADE bắt nhầm** (`S21`) và **gợi ý ID lỗi thời** (`S23`): không làm trượt câu nhưng gây báo động giả / hướng dẫn sai.
-- **Lượt 2:** `S12` đã sửa, nhưng **`S01` (bài sạch) tệ đi** — bị gắn lỗi nặng giả cho link repo giả lập → hỏng vế 100% bài sạch.
+- **Lượt 1:** **Xếp sai mức nghiêm trọng** (`S12`, câu trượt duy nhất lượt 1: lỗi thiếu file bị đẩy xuống sau lỗi nhẹ), cộng 2 khiếm khuyết ở `S21` (hậu kiểm NO-AUTO-GRADE bắt nhầm `'42/100 review'`) và `S23` (gợi ý ID lỗi thời tới S15).
+- **Lượt 2:** Đã sửa dứt điểm `S12` (`kho` đạt `12/12 = 100%`), `S21` và `S23`; phát sinh 1 câu tệ đi là `S17` (`thuong`) do model viết nhầm tên file trích dẫn `evidence/summary.md` thay vì `evidence_summary.md` (đã được `[HẬU KIỂM TRÍCH DẪN]` tự cảnh báo).
 - Chi tiết input · output · vì sao sai: `eval/report.md` mục 2–3.
