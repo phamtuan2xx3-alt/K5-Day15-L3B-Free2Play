@@ -671,6 +671,19 @@ def _check_post_cp2_tamper(
     }, flags, False
 
 
+_RUBRIC_DOC_BASENAMES = frozenset({"rubric.md", "submission.md", "checkpoints.md", "rules.md", "readme.md"})
+_TEAM_FILE_MENTION_RE = re.compile(r"\bTEAMS?\.md\b", re.IGNORECASE)
+
+
+def _repo_rubric_requires_team_file(files_content: dict[str, str]) -> bool:
+    """True nếu file đề / hướng dẫn nộp của repo (RUBRIC, SUBMISSION, CHECKPOINTS, RULES, README) nhắc tới TEAM.md / TEAMS.md."""
+    for path, text in (files_content or {}).items():
+        base = os.path.basename(str(path).replace("\\", "/")).lower()
+        if base in _RUBRIC_DOC_BASENAMES and _TEAM_FILE_MENTION_RE.search(str(text or "")):
+            return True
+    return False
+
+
 def _compute_missing_required(files_content: dict[str, str], profile: str | None = None) -> list[str]:
     """Xác định file bắt buộc còn thiếu tuỳ theo cấu trúc repo (Day 15 hay repo lab có RUBRIC.md riêng)."""
     effective_profile = profile or detect_repo_profile(files_content)
@@ -686,7 +699,11 @@ def _compute_missing_required(files_content: dict[str, str], profile: str | None
 
     has_team = _has_any(*TEAM_FILE_CANDIDATES)
     if effective_profile == "repo_custom_rubric":
-        return [] if has_team else ["TEAM.md / TEAMS.md"]
+        # Repo lab có đề riêng: chỉ bắt file team khi chính đề trong repo yêu cầu
+        # (bài cá nhân như lab Day 14 không có TEAM.md là hợp lệ).
+        if has_team or not _repo_rubric_requires_team_file(files_content):
+            return []
+        return ["TEAM.md / TEAMS.md"]
 
     missing: list[str] = []
     if not has_team:
