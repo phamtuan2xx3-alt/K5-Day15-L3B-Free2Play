@@ -27,6 +27,19 @@ REQUIRED_FILES = [
     "benchmark.csv",
     "metric_spec.yaml",
 ]
+TEAM_FILE_CANDIDATES = ("TEAMS.md", "TEAM.md", "docs/TEAMS.md", "docs/TEAM.md")
+_DAY15_ANCHOR_FILES = frozenset({
+    "canvas.md",
+    "spec.md",
+    "evidence/summary.md",
+    "evidence_summary.md",
+    "eval/benchmark.csv",
+    "benchmark.csv",
+    "eval/metric_spec.yaml",
+    "metric_spec.yaml",
+    "meta.json",
+})
+_CUSTOM_LAB_MARKER_FILES = frozenset({"rubric.md", "submission.md", "checkpoints.md"})
 
 CITE_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_./-])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.(?:md|csv|yaml|yml|json|txt)):L(\d{1,4})\b"
@@ -508,14 +521,32 @@ def _scan_meta_dict(
     return findings, expected_bench_count
 
 
+def detect_repo_profile(files_content: dict) -> str:
+    """Phân biệt cấu trúc Hackathon Day 15 (`ai20k_day15`) với repo lab dùng rubric/report riêng (`repo_custom_rubric`)."""
+    keys_low = [str(k).strip().replace("\\", "/").lower() for k in (files_content or {}).keys()]
+    basenames_low = {os.path.basename(k) for k in keys_low}
+    if any(k in _DAY15_ANCHOR_FILES or os.path.basename(k) in _DAY15_ANCHOR_FILES for k in keys_low):
+        return "ai20k_day15"
+    if (basenames_low & _CUSTOM_LAB_MARKER_FILES) or any(
+        k.startswith(("report/team/", "report/individual/")) for k in keys_low
+    ):
+        return "repo_custom_rubric"
+    return "ai20k_day15"
+
+
 def _pick_file(files_lines: dict[str, list[str]], candidates: tuple[str, ...]) -> tuple[str | None, list[str] | None]:
-    """Tìm file theo danh sách đường dẫn ưu tiên, sau đó đối chiếu theo tên file gốc."""
+    """Tìm file theo đường dẫn ưu tiên (chính xác rồi không phân biệt hoa thường), sau đó đối chiếu basename."""
     for cand in candidates:
         if cand in files_lines:
             return cand, files_lines[cand]
-    basenames = {os.path.basename(c) for c in candidates}
+    lower_map = {fname.lower(): fname for fname in files_lines}
+    for cand in candidates:
+        matched = lower_map.get(cand.lower())
+        if matched is not None:
+            return matched, files_lines[matched]
+    basenames = {os.path.basename(c).lower() for c in candidates}
     for fname, lines in files_lines.items():
-        if os.path.basename(fname) in basenames:
+        if os.path.basename(fname).lower() in basenames:
             return fname, lines
     return None, None
 
@@ -525,8 +556,9 @@ def scan_in_memory_submission(
     meta: dict | None = None,
     expected_bench_count: int | None = None,
 ) -> list[dict]:
-    """Quét toàn bộ luật cứng trên dữ liệu nằm trong RAM (dùng chung cho S01..S25 và GitHub Live Guard)."""
+    """Quét toàn bộ luật cứng trên dữ liệu nằm trong RAM (dùng chung cho S01..S30 và GitHub Live Guard)."""
     files_lines = {fname: _to_lines(content) for fname, content in (files_content or {}).items()}
+    profile = detect_repo_profile(files_content)
     findings = []
 
     meta_fname, meta_lines = _pick_file(files_lines, ("meta.json",))
@@ -550,8 +582,8 @@ def scan_in_memory_submission(
         if expected_bench_count is None:
             expected_bench_count = meta_bench_count
 
-    teams_name, teams_lines = _pick_file(files_lines, ("TEAMS.md",))
-    if teams_lines is not None and teams_name is not None:
+    teams_name, teams_lines = _pick_file(files_lines, TEAM_FILE_CANDIDATES)
+    if teams_lines is not None and teams_name is not None and profile == "ai20k_day15":
         findings.extend(scan_teams_lines(teams_lines, filename=teams_name))
 
     canvas_name, canvas_lines = _pick_file(files_lines, ("canvas.md",))
@@ -607,10 +639,10 @@ def scan_hard_rules(submission_id: str) -> list:
 
 @tool
 def extract_project_identity(files_content: dict, github_owner: str = "") -> dict:
-    """Nhận diện danh tính dự án (nhóm >=2 thành viên vs cá nhân 0-1 người) từ TEAMS.md, spec.md §10 và reflection/*.md.
-    Input: files_content (dict[str, str]), github_owner (str). Output: dict {mode, default_user, members, member_names, team_name, track}. Không tác động ra ngoài."""
+    """Nhận diện danh tính dự án (nhóm >=2 thành viên vs cá nhân 0-1 người) từ TEAMS.md / TEAM.md, spec.md §10 và reflection/report individual.
+    Input: files_content (dict[str, str]), github_owner (str). Output: dict {mode, default_user, members, member_names, team_name, track, team_file}. Không tác động ra ngoài."""
     files_lines = {fname: _to_lines(content) for fname, content in (files_content or {}).items()}
-    _, teams_lines = _pick_file(files_lines, ("TEAMS.md",))
+    teams_name, teams_lines = _pick_file(files_lines, TEAM_FILE_CANDIDATES)
     _, spec_lines = _pick_file(files_lines, ("spec.md",))
 
     team_name = ""
@@ -619,12 +651,12 @@ def extract_project_identity(files_content: dict, github_owner: str = "") -> dic
 
     if teams_lines:
         for ln in teams_lines:
-            m_team = re.match(r"^\s*-\s*Tên\s+nhóm\s*:\s*(.+)$", ln)
+            m_team = re.match(r"^\s*-\s*\*{0,2}\s*Tên\s+nhóm\s*\*{0,2}\s*:\s*(.+)$", ln)
             if m_team:
-                val = m_team.group(1).strip()
+                val = m_team.group(1).strip().strip("*").strip()
                 if val and "____" not in val:
                     team_name = val
-            m_track = re.match(r"^\s*-\s*Track\s*:\s*([A-F])\b", ln)
+            m_track = re.match(r"^\s*-\s*\*{0,2}\s*Track\s*\*{0,2}\s*:\s*([A-F])\b", ln)
             if m_track:
                 track = m_track.group(1).strip()
 
@@ -632,7 +664,7 @@ def extract_project_identity(files_content: dict, github_owner: str = "") -> dic
             if not s.startswith("|") or s.startswith("|---") or "Họ và tên" in s:
                 continue
             cells = [c.strip() for c in s.strip("|").split("|")]
-            if len(cells) >= 5 and cells[0].isdigit():
+            if len(cells) >= 4 and cells[0].isdigit():
                 name = cells[1].strip()
                 if not name or "____" in name:
                     continue
@@ -642,13 +674,15 @@ def extract_project_identity(files_content: dict, github_owner: str = "") -> dic
                     "slug": _slugify(name),
                     "student_id": cells[2].strip(),
                     "role": cells[3].strip(),
-                    "tasks": cells[4].strip(),
+                    "tasks": cells[4].strip() if len(cells) >= 5 else "",
                     "reflection_file": "",
                 })
 
     reflection_files = [
         fname for fname in files_lines
-        if fname.startswith("reflection/") and fname.endswith(".md")
+        if (fname.lower().startswith("reflection/") or fname.lower().startswith("report/individual/"))
+        and fname.lower().endswith(".md")
+        and os.path.basename(fname).lower() not in {"readme.md", "mssv_hoten.md"}
     ]
     spec_s10_lines: list[str] = []
     if spec_lines:
@@ -664,11 +698,18 @@ def extract_project_identity(files_content: dict, github_owner: str = "") -> dic
 
     for member in members:
         m_slug = member["slug"]
+        m_compact = m_slug.replace("-", "")
+        m_sid = member["student_id"].strip().lower()
         m_name_low = member["name"].lower()
         last_token = m_slug.split("-")[-1] if m_slug else ""
         for rfile in reflection_files:
             rbase = os.path.basename(rfile).lower()
-            if m_slug in rbase or (last_token and last_token in rbase):
+            if (
+                (m_sid and m_sid != "____" and m_sid in rbase)
+                or (m_slug and m_slug in rbase)
+                or (m_compact and m_compact in rbase)
+                or (last_token and last_token in rbase)
+            ):
                 member["reflection_file"] = rfile
                 break
         if spec_s10_lines:
@@ -693,6 +734,7 @@ def extract_project_identity(files_content: dict, github_owner: str = "") -> dic
         "member_names": [m["name"] for m in members],
         "team_name": team_name,
         "track": track,
+        "team_file": teams_name or "",
     }
 
 

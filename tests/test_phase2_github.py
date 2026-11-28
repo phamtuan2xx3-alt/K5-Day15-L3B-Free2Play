@@ -351,6 +351,103 @@ class TestPhase2Snapshot4Layers(unittest.TestCase):
         self.assertEqual(tampered_files, {"eval/metric_spec.yaml"})
         self.assertEqual(snap["checks"]["tree_scan"]["sensitive_files"], [".env"])
 
+    def test_day02_team_md_and_custom_rubric_discovery(self):
+        day02_team = (
+            "# Team\n"
+            "- Tên nhóm: E99\n\n"
+            "| STT | Họ và tên | MSSV | Vai trò trong nhóm | Tài khoản GitHub |\n"
+            "|---:|---|---|---|---|\n"
+            "| 1 | Chu Văn Nhật | 2A202603848 | Phụ trách Thiết kế quy trình | moyymochi11 |\n"
+            "| 2 | Phạm Quang Tuấn | 2A202603824 | Nhóm trưởng, Phụ trách Kiểm chứng | phamtuan2xx3-alt |\n"
+            "| 3 | Nguyễn Trọng Lâm | 2A202603817 | Phụ trách Hội tụ nhóm | NTLam108 |\n"
+        )
+
+        def router(u):
+            if u == "https://api.github.com/repos/stu/day02-e99":
+                return _MockResponse(200, json.dumps({"private": False, "fork": False, "default_branch": "main"}))
+            if "/commits?" in u:
+                return _MockResponse(200, "[]")
+            if u == "https://api.github.com/repos/stu/day02-e99/git/trees/main?recursive=1":
+                tree = [
+                    {"type": "blob", "path": "README.md"},
+                    {"type": "blob", "path": "TEAM.md"},
+                    {"type": "blob", "path": "RUBRIC.md"},
+                    {"type": "blob", "path": "SUBMISSION.md"},
+                    {"type": "blob", "path": "report/team/group_report.md"},
+                    {"type": "blob", "path": "report/individual/2A202603824_PhamQuangTuan.md"},
+                    {"type": "blob", "path": "report/individual/MSSV_HoTen.md"},
+                    {"type": "blob", "path": "report/assets/cp4-interview-snapshot-1.md"},
+                ]
+                return _MockResponse(200, json.dumps({"sha": "day02sha", "tree": tree}))
+            raw_map = {
+                "https://raw.githubusercontent.com/stu/day02-e99/main/TEAM.md": day02_team,
+                "https://raw.githubusercontent.com/stu/day02-e99/main/RUBRIC.md": "# Rubric Day 02\n- Đủ báo cáo nhóm.\n",
+                "https://raw.githubusercontent.com/stu/day02-e99/main/SUBMISSION.md": "# Submission Day 02\n",
+                "https://raw.githubusercontent.com/stu/day02-e99/main/README.md": "# Day 02\n",
+                "https://raw.githubusercontent.com/stu/day02-e99/main/report/team/group_report.md": "# Group Report\n",
+                "https://raw.githubusercontent.com/stu/day02-e99/main/report/individual/2A202603824_PhamQuangTuan.md": "# Tuan\n",
+                "https://raw.githubusercontent.com/stu/day02-e99/main/report/assets/cp4-interview-snapshot-1.md": "# Snapshot 1\n",
+            }
+            if u in raw_map:
+                return _MockResponse(200, raw_map[u])
+            raise _http_err(u, 404)
+
+        snap, _ = self._run_with_router("https://github.com/stu/day02-e99", router)
+        self.assertTrue(snap["ok"])
+        self.assertEqual(snap["repo_profile"], "repo_custom_rubric")
+        for expected_file in (
+            "TEAM.md",
+            "RUBRIC.md",
+            "SUBMISSION.md",
+            "report/team/group_report.md",
+            "report/individual/2A202603824_PhamQuangTuan.md",
+        ):
+            self.assertIn(expected_file, snap["present_files"])
+        self.assertEqual(snap["missing_required"], [])
+        self.assertEqual(snap["hard_flags"], [])
+        self.assertEqual(snap["identity"]["mode"], "team")
+        self.assertEqual(snap["identity"]["team_file"], "TEAM.md")
+        self.assertEqual(snap["identity"]["team_name"], "E99")
+        self.assertEqual(
+            snap["identity"]["member_names"],
+            ["Chu Văn Nhật", "Phạm Quang Tuấn", "Nguyễn Trọng Lâm"],
+        )
+        tuan = next(m for m in snap["identity"]["members"] if m["student_id"] == "2A202603824")
+        self.assertEqual(tuan["reflection_file"], "report/individual/2A202603824_PhamQuangTuan.md")
+
+    def test_day15_with_team_md_fallback_reads_members(self):
+        def router(u):
+            if u == "https://api.github.com/repos/team/day15-singular":
+                return _MockResponse(200, json.dumps({"private": False, "fork": False, "default_branch": "main"}))
+            if "/commits?" in u:
+                return _MockResponse(200, "[]")
+            if u == "https://api.github.com/repos/team/day15-singular/git/trees/main?recursive=1":
+                tree = [
+                    {"type": "blob", "path": p}
+                    for p in ("TEAM.md", "canvas.md", "spec.md")
+                ]
+                return _MockResponse(200, json.dumps({"sha": "day15sha", "tree": tree}))
+            raw_map = {
+                "https://raw.githubusercontent.com/team/day15-singular/main/TEAM.md": _CLEAN_TEAMS,
+                "https://raw.githubusercontent.com/team/day15-singular/main/canvas.md": _CLEAN_CANVAS,
+                "https://raw.githubusercontent.com/team/day15-singular/main/spec.md": _CLEAN_SPEC,
+            }
+            if u in raw_map:
+                return _MockResponse(200, raw_map[u])
+            raise _http_err(u, 404)
+
+        snap, _ = self._run_with_router("https://github.com/team/day15-singular", router)
+        self.assertTrue(snap["ok"])
+        self.assertEqual(snap["repo_profile"], "ai20k_day15")
+        self.assertEqual(snap["identity"]["mode"], "team")
+        self.assertEqual(snap["identity"]["team_file"], "TEAM.md")
+        self.assertEqual(
+            snap["identity"]["member_names"],
+            ["Phạm Quang Tuấn", "Đỗ Hồng Vỹ", "Chu Văn Nhật"],
+        )
+        self.assertNotIn("TEAMS.md", snap["missing_required"])
+        self.assertIn("evidence/summary.md", snap["missing_required"])
+
 
 class TestPhase2AgentGitHubRoute(unittest.TestCase):
     def test_agent_audit_github_and_ssrf_block(self):

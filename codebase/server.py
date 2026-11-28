@@ -968,7 +968,7 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
         hard_flags = snap.get("hard_flags") or []
         checks_ui = _normalize_checks_for_ui("github", snap.get("checks"), hard_flags)
 
-        cache_key = f"audit:{full_name.lower()}"
+        cache_key = f"audit:v2:{full_name.lower()}"
         cached_audit = None if req.force_refresh else store.get_cached_github(cache_key)
         if cached_audit and cached_audit.get("commit_sha") == commit_sha and (cached_audit.get("payload") or {}).get("audit_output"):
             audit_output = str(cached_audit["payload"]["audit_output"])
@@ -981,15 +981,13 @@ def create_app(db_path: str | os.PathLike[str] | None = None) -> FastAPI:
                 "missing_required": snap["missing_required"],
                 "line_counts": snap["line_counts"],
             }
-            numbered_contents = {
-                fname: tools.format_numbered_lines(raw_txt, limit=120)
-                for fname, raw_txt in files_content.items()
-            }
-            notes_list = list(snap.get("g10_warnings") or [])
-            if identity.get("mode") == "team":
-                notes_list.append("Chế độ nhóm — thành viên trong TEAMS.md: " + ", ".join(identity.get("member_names") or []))
-            else:
-                notes_list.append(f"Chế độ cá nhân — mặc định: {identity.get('default_user')}")
+            numbered_contents = agent._format_bounded_file_contents(files_content)
+            repo_profile = str(snap.get("repo_profile") or "ai20k_day15")
+            notes_list = agent.build_github_audit_notes(
+                identity,
+                repo_profile,
+                base_warnings=list(snap.get("g10_warnings") or []),
+            )
 
             tracing.begin("api_scan_github")
             try:

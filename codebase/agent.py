@@ -38,7 +38,7 @@ NGUYÊN TẮC BẮT BUỘC:
    (1) Lỗi cứng & cảnh báo an toàn (giữ nguyên toàn bộ phát hiện từ bộ quét code);
    (2) Đối chiếu chéo bằng chứng & lập luận (nhất quán số liệu, lát cắt, kiến trúc, thiếu file);
    (3) Hạng mục đạt / chưa kiểm được (G10);
-   (4) 2 câu hỏi vặn phản biện nhắm đúng chỗ yếu nhất của bài (hoặc chỗ cần làm rõ nhất nếu bài sạch), gọi đích danh tên thành viên trong `TEAMS.md` gắn với phần việc tương ứng."""
+   (4) 2 câu hỏi vặn phản biện nhắm đúng chỗ yếu nhất của bài (hoặc chỗ cần làm rõ nhất nếu bài sạch), gọi đích danh tên thành viên trong file thông tin đội (`TEAMS.md` hoặc `TEAM.md`, nếu có) gắn với phần việc tương ứng."""
 
 
 SYSTEM_VIVA_ASK = """Bạn là Giám khảo hỏi vặn phản biện hackathon AI20K theo thang Bloom 6 bậc (L0–L6).
@@ -200,7 +200,19 @@ def _extract_json_block(text: str, tag: str) -> dict | None:
 def _find_anchor_cites(files_content: dict[str, str], line_counts: dict[str, int]) -> list[tuple[str, int, str]]:
     """Tìm các dòng neo thực tế trong hồ sơ để gắn file:Lxx chính xác."""
     anchors: list[tuple[str, int, str]] = []
-    preferred = ("spec.md", "evidence/summary.md", "evidence_summary.md", "TEAMS.md", "canvas.md", "eval/benchmark.csv", "benchmark.csv")
+    preferred = (
+        "spec.md",
+        "evidence/summary.md",
+        "evidence_summary.md",
+        "TEAMS.md",
+        "TEAM.md",
+        "report/team/group_report.md",
+        "RUBRIC.md",
+        "SUBMISSION.md",
+        "canvas.md",
+        "eval/benchmark.csv",
+        "benchmark.csv",
+    )
     ordered = [p for p in preferred if p in files_content] + [p for p in files_content if p not in preferred and p != "meta.json"]
     for fname in ordered:
         lines = (files_content.get(fname) or "").splitlines()
@@ -209,7 +221,7 @@ def _find_anchor_cites(files_content: dict[str, str], line_counts: dict[str, int
             s = ln.strip()
             if not s or s.startswith("#") or s.startswith("|---"):
                 continue
-            if idx <= max_ln and any(k in s.lower() for k in ("lát cắt", "hình dạng", "workflow", "g10", "impact", "khảo sát", "phỏng vấn", "chuẩn", "đạt", "đội trưởng", "thành viên")):
+            if idx <= max_ln and any(k in s.lower() for k in ("lát cắt", "hình dạng", "workflow", "g10", "impact", "khảo sát", "phỏng vấn", "chuẩn", "đạt", "đội trưởng", "nhóm trưởng", "thành viên")):
                 anchors.append((fname, idx, s[:100]))
                 if len(anchors) >= 6:
                     return anchors
@@ -218,10 +230,103 @@ def _find_anchor_cites(files_content: dict[str, str], line_counts: dict[str, int
     return anchors
 
 
+def _format_bounded_file_contents(
+    files_content: dict[str, str],
+    *,
+    max_lines_per_file: int = 120,
+    max_total_chars: int = 48_000,
+) -> dict[str, str]:
+    """Định dạng nội dung các file đánh số dòng có ưu tiên file cốt lõi và giới hạn tổng ký tự prompt."""
+    priority_prefixes = (
+        "teams.md",
+        "team.md",
+        "rubric.md",
+        "submission.md",
+        "checkpoints.md",
+        "spec.md",
+        "canvas.md",
+        "evidence/summary.md",
+        "evidence_summary.md",
+        "report/team/",
+        "report/individual/",
+        "report/assets/",
+        "eval/benchmark.csv",
+        "benchmark.csv",
+        "eval/metric_spec.yaml",
+        "metric_spec.yaml",
+        "reflection/",
+        "rules.md",
+        "readme.md",
+    )
+
+    def _priority_key(fname: str) -> tuple[int, str]:
+        low = fname.lower()
+        for idx, prefix in enumerate(priority_prefixes):
+            if low == prefix or low.startswith(prefix):
+                return (idx, low)
+        return (len(priority_prefixes), low)
+
+    ordered = [
+        fname
+        for fname in sorted((files_content or {}).keys(), key=_priority_key)
+        if fname != "meta.json"
+    ]
+    formatted: dict[str, str] = {}
+    used_chars = 0
+    for fname in ordered:
+        raw_text = files_content.get(fname) or ""
+        remaining = max_total_chars - used_chars
+        if remaining <= 400:
+            preview = format_numbered_lines(raw_text, limit=15)
+            formatted[fname] = preview[:400] + "\n... (rút gọn do giới hạn ngữ cảnh prompt)"
+            continue
+        block = format_numbered_lines(raw_text, limit=max_lines_per_file)
+        if len(block) > remaining:
+            preview = format_numbered_lines(raw_text, limit=20)
+            block = preview[:remaining] + "\n... (rút gọn do giới hạn ngữ cảnh prompt)"
+        formatted[fname] = block
+        used_chars += len(block)
+    return formatted
+
+
+def build_github_audit_notes(
+    identity: dict,
+    repo_profile: str,
+    base_warnings: list[str] | None = None,
+) -> list[str]:
+    """Tạo ghi chú ngữ cảnh dùng chung cho cả CLI AUDIT_GITHUB và Web Server /api/scan."""
+    notes = list(base_warnings or [])
+    team_file = str(identity.get("team_file") or "").strip()
+    team_label = team_file or "TEAMS.md / TEAM.md"
+
+    if identity.get("mode") == "team":
+        notes.append(
+            f"Chế độ nhóm — thành viên trong {team_label}: "
+            + ", ".join(identity.get("member_names") or [])
+        )
+    else:
+        notes.append(f"Chế độ cá nhân — mặc định: {identity.get('default_user')}")
+
+    if repo_profile == "ai20k_day15" and team_file and os.path.basename(team_file).upper() == "TEAM.MD":
+        notes.append(
+            f"File thông tin đội đang đặt tên là `{team_file}` (đã đọc đủ nội dung và danh sách thành viên; lưu ý chuẩn Day 15 yêu cầu tên `TEAMS.md`)."
+        )
+    elif repo_profile == "repo_custom_rubric":
+        notes.append(
+            "Hồ sơ thuộc cấu trúc bài lab riêng (có RUBRIC.md / SUBMISSION.md / report/, không phải template Hackathon Day 15). "
+            "Hãy đối chiếu trực tiếp theo RUBRIC.md, SUBMISSION.md và toàn bộ các file thực tế có trong repo "
+            "(TEAM.md, report/team/group_report.md, report/individual/*.md, report/assets/*.md); "
+            "KHÔNG bắt lỗi thiếu 6 file chỉ thuộc Day 15 (TEAMS.md, canvas.md, spec.md, eval/benchmark.csv, eval/metric_spec.yaml), "
+            "vẫn giữ bắt buộc trích dẫn file:Lxx, G10, NO-AUTO-GRADE, PENALTY-KEY, PROMPT-INJECTION và đặt 2 câu hỏi vặn gọi đích danh thành viên."
+        )
+    return notes
+
+
 def _resolve_team_member(identity: dict, requested_name: str) -> tuple[bool, str, str]:
-    """Kiểm tra danh tính thành viên: Team phải khớp tên trong TEAMS.md; Personal tự mặc định."""
+    """Kiểm tra danh tính thành viên: Team phải khớp tên trong file thông tin đội; Personal tự mặc định."""
     mode = identity.get("mode", "personal")
     members = identity.get("members") or []
+    team_file = identity.get("team_file") or "TEAMS.md"
     req = (requested_name or "").strip()
 
     if mode != "team":
@@ -232,7 +337,7 @@ def _resolve_team_member(identity: dict, requested_name: str) -> tuple[bool, str
         return (
             False,
             "",
-            f"[CHƯA KIỂM ĐƯỢC — G10] Dự án nhóm yêu cầu chọn rõ `TARGET: <Tên thành viên>` trong `TEAMS.md`.\n"
+            f"[CHƯA KIỂM ĐƯỢC — G10] Dự án nhóm yêu cầu chọn rõ `TARGET: <Tên thành viên>` trong `{team_file}`.\n"
             f"Danh sách thành viên hợp lệ: {names}.",
         )
 
@@ -249,8 +354,8 @@ def _resolve_team_member(identity: dict, requested_name: str) -> tuple[bool, str
     return (
         False,
         "",
-        f"[CHƯA KIỂM ĐƯỢC — G10] Không tìm thấy thành viên `{req}` trong `TEAMS.md`.\n"
-        f"Danh sách thành viên thật có trong `TEAMS.md`: {names}.",
+        f"[CHƯA KIỂM ĐƯỢC — G10] Không tìm thấy thành viên `{req}` trong `{team_file}`.\n"
+        f"Danh sách thành viên thật có trong `{team_file}`: {names}.",
     )
 
 
@@ -1041,19 +1146,14 @@ def _handle_github_audit(text: str, action_banner: str = "") -> dict:
         "missing_required": snapshot["missing_required"],
         "line_counts": snapshot["line_counts"],
     }
-    file_contents = {
-        fname: format_numbered_lines(raw_text, limit=120)
-        for fname, raw_text in (snapshot.get("files_content") or {}).items()
-        if fname != "meta.json"
-    }
-    notes_list = list(snapshot.get("g10_warnings") or [])
+    file_contents = _format_bounded_file_contents(snapshot.get("files_content") or {})
     identity = snapshot.get("identity") or {}
-    if identity.get("mode") == "team":
-        notes_list.append(
-            "Chế độ nhóm — thành viên trong TEAMS.md: " + ", ".join(identity.get("member_names") or [])
-        )
-    else:
-        notes_list.append(f"Chế độ cá nhân — mặc định: {identity.get('default_user')}")
+    repo_profile = str(snapshot.get("repo_profile") or "ai20k_day15")
+    notes_list = build_github_audit_notes(
+        identity,
+        repo_profile,
+        base_warnings=list(snapshot.get("g10_warnings") or []),
+    )
 
     return _run_audit_pipeline(
         text,

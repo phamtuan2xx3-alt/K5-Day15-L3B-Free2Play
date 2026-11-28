@@ -19,7 +19,12 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from tools import extract_project_identity, scan_in_memory_submission
+from tools import (
+    TEAM_FILE_CANDIDATES,
+    detect_repo_profile,
+    extract_project_identity,
+    scan_in_memory_submission,
+)
 
 USER_AGENT = "RepoKSV-Auditor/1.0"
 CP2_CUTOFF_ISO = "2026-11-27T12:30:00Z"  # 19:30 UTC+7 ngày 27/11/2026
@@ -83,6 +88,7 @@ _ENV_SAFE_ALLOWLIST = frozenset({".env.example", ".env.sample", ".env.template"}
 
 _CANDIDATE_RAW_PATHS = [
     "TEAMS.md",
+    "TEAM.md",
     "canvas.md",
     "spec.md",
     "evidence/summary.md",
@@ -91,8 +97,27 @@ _CANDIDATE_RAW_PATHS = [
     "benchmark.csv",
     "eval/metric_spec.yaml",
     "metric_spec.yaml",
+    "SUBMISSION.md",
+    "RUBRIC.md",
+    "CHECKPOINTS.md",
+    "RULES.md",
+    "report/team/group_report.md",
     "README.md",
 ]
+_TREE_IGNORED_SEGMENTS = frozenset({
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "vendor",
+    ".next",
+    ".study_logs",
+})
+_DELIVERABLE_DOC_EXTS = (".md", ".csv", ".yaml", ".yml")
+_TEMPLATE_SKIP_BASENAMES = frozenset({"readme.md", "mssv_hoten.md"})
 
 _RAM_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
@@ -373,7 +398,7 @@ def _is_sensitive_tree_path(path: str) -> bool:
 
 
 def _select_paths_from_tree(tree_items: list[dict[str, Any]], max_files: int) -> tuple[list[str], list[str]]:
-    """Chọn danh sách file trọng yếu để tải qua raw và lọc file nhạy cảm trên tree."""
+    """Chọn danh sách file trọng yếu (Day 15 + repo lab TEAM.md/RUBRIC.md/report/) và lọc file nhạy cảm."""
     sensitive_paths: list[str] = []
     blob_paths: list[str] = []
     for item in tree_items:
@@ -382,29 +407,68 @@ def _select_paths_from_tree(tree_items: list[dict[str, Any]], max_files: int) ->
         path = str(item.get("path") or "").strip()
         if not path:
             continue
-        blob_paths.append(path)
         if _is_sensitive_tree_path(path):
             sensitive_paths.append(path)
+        parts_low = path.replace("\\", "/").lower().split("/")
+        if any(seg in _TREE_IGNORED_SEGMENTS for seg in parts_low):
+            continue
+        if len(parts_low) >= 2 and (
+            (parts_low[0] == "data" and parts_low[1] == "submissions") or parts_low[0] == "tests"
+        ):
+            continue
+        blob_paths.append(path)
 
-    blob_set = set(blob_paths)
+    lower_to_actual: dict[str, str] = {}
+    for p in blob_paths:
+        lower_to_actual.setdefault(p.lower(), p)
+
     selected: list[str] = []
-    for cand in _CANDIDATE_RAW_PATHS:
-        if cand in blob_set and cand not in selected:
-            selected.append(cand)
 
-    reflection_paths = sorted(
-        p for p in blob_paths if p.startswith("reflection/") and p.endswith(".md")
-    )[:5]
-    for rp in reflection_paths:
-        if rp not in selected:
-            selected.append(rp)
+    def _add(path: str) -> None:
+        if path and path not in selected:
+            selected.append(path)
 
-    # Nếu chưa có đủ file chuẩn nhưng repo có .env* hoặc file cấu hình khác
+    # Tầng 1: File cốt lõi (ưu tiên Day 15 + TEAM.md + RUBRIC/SUBMISSION/CHECKPOINTS/RULES/README)
+    for cand in _CANDIDATE_RAW_PATHS + ["docs/TEAMS.md", "docs/TEAM.md"]:
+        actual = lower_to_actual.get(cand.lower())
+        if actual:
+            _add(actual)
+
+    # Tầng 2: Tài liệu sản phẩm & minh chứng trong report/, reflection/, evidence/, eval/
+    tier2 = sorted(
+        p
+        for p in blob_paths
+        if p.lower().startswith(("report/team/", "report/individual/", "report/assets/", "reflection/", "evidence/", "eval/"))
+        and p.lower().endswith(_DELIVERABLE_DOC_EXTS)
+        and os.path.basename(p).lower() not in _TEMPLATE_SKIP_BASENAMES
+    )
+    for p in tier2:
+        _add(p)
+
+    # Tầng 3: Các file .md/.yaml/.yml ở gốc repo và docs/*.md
+    tier3_root = sorted(
+        p for p in blob_paths if "/" not in p and p.lower().endswith(_DELIVERABLE_DOC_EXTS)
+    )
+    tier3_docs = sorted(
+        p
+        for p in blob_paths
+        if p.lower().startswith("docs/") and p.lower().endswith(".md") and os.path.basename(p).lower() != "readme.md"
+    )
+    effective_cap = min(max_files, 24)
+    for p in tier3_root + tier3_docs:
+        if len(selected) >= effective_cap:
+            break
+        _add(p)
+
+    doc_selected = selected[:effective_cap]
+
+    # Tầng 4: Toàn bộ file nhạy cảm (.env, .pem, credentials...) luôn được tải để kiểm PENALTY-KEY
+    final_selected = list(doc_selected)
     for sp in sensitive_paths:
-        if sp not in selected and len(selected) < max_files:
-            selected.append(sp)
+        if sp not in final_selected and len(final_selected) < max_files:
+            final_selected.append(sp)
 
-    return selected[:max_files], sensitive_paths
+    return final_selected[:max_files], sensitive_paths
 
 
 def _fetch_raw_files(
@@ -607,17 +671,34 @@ def _check_post_cp2_tamper(
     }, flags, False
 
 
-def _compute_missing_required(files_content: dict[str, str]) -> list[str]:
-    keys = set(files_content.keys())
+def _compute_missing_required(files_content: dict[str, str], profile: str | None = None) -> list[str]:
+    """Xác định file bắt buộc còn thiếu tuỳ theo cấu trúc repo (Day 15 hay repo lab có RUBRIC.md riêng)."""
+    effective_profile = profile or detect_repo_profile(files_content)
+    keys_low = {str(k).strip().replace("\\", "/").lower() for k in (files_content or {}).keys()}
+    basenames_low = {os.path.basename(k) for k in keys_low}
+
+    def _has_any(*cands: str) -> bool:
+        for cand in cands:
+            c_low = cand.lower()
+            if c_low in keys_low or os.path.basename(c_low) in basenames_low:
+                return True
+        return False
+
+    has_team = _has_any(*TEAM_FILE_CANDIDATES)
+    if effective_profile == "repo_custom_rubric":
+        return [] if has_team else ["TEAM.md / TEAMS.md"]
+
     missing: list[str] = []
-    for req in ("TEAMS.md", "canvas.md", "spec.md"):
-        if req not in keys:
+    if not has_team:
+        missing.append("TEAMS.md")
+    for req in ("canvas.md", "spec.md"):
+        if not _has_any(req):
             missing.append(req)
-    if "evidence/summary.md" not in keys and "evidence_summary.md" not in keys:
+    if not _has_any("evidence/summary.md", "evidence_summary.md"):
         missing.append("evidence/summary.md")
-    if "eval/benchmark.csv" not in keys and "benchmark.csv" not in keys:
+    if not _has_any("eval/benchmark.csv", "benchmark.csv"):
         missing.append("eval/benchmark.csv")
-    if "eval/metric_spec.yaml" not in keys and "metric_spec.yaml" not in keys:
+    if not _has_any("eval/metric_spec.yaml", "metric_spec.yaml"):
         missing.append("eval/metric_spec.yaml")
     return missing
 
@@ -873,10 +954,11 @@ def fetch_github_repo_snapshot(
         )
 
     # Tầng D: Quét luật cứng trên RAM + nhận diện danh tính Team/Cá nhân
+    repo_profile = detect_repo_profile(files_content)
     content_flags = scan_in_memory_submission(files_content)
     all_flags = _dedup_flags(api_flags + content_flags)
     line_counts = {fname: len(txt.splitlines()) for fname, txt in files_content.items()}
-    missing_required = _compute_missing_required(files_content)
+    missing_required = _compute_missing_required(files_content, profile=repo_profile)
     identity = extract_project_identity(files_content, github_owner=owner)
 
     checks["penalty_key"] = {
@@ -887,6 +969,7 @@ def fetch_github_repo_snapshot(
         "ok": True,
         "error_code": "",
         "g10_message": "",
+        "repo_profile": repo_profile,
         "target": target,
         "owner": owner,
         "repo": repo,
